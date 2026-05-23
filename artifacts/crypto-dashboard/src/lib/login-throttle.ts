@@ -110,6 +110,21 @@ export function recordSuccess(email: string): void {
   }
 }
 
+/**
+ * Clear any failure/lockout state tracked for `email` on this device.
+ * Equivalent in effect to recordSuccess; exposed under a dedicated name so
+ * callers that need to express "admin unlocked this account" intent can do
+ * so without implying the user actually signed in successfully here.
+ *
+ * Note: this only clears the per-browser localStorage record on the device
+ * it runs in. The authoritative throttle for sign-in lives on the server
+ * (see api-server's login-throttle.ts → clearLoginFailures), which is what
+ * the admin "Unlock sign-in" action targets via the API.
+ */
+export function clearLockout(email: string): void {
+  recordSuccess(email);
+}
+
 export function subscribe(listener: () => void): () => void {
   if (typeof window === "undefined") return () => {};
   const handler = () => listener();

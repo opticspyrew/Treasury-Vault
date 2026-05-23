@@ -6,6 +6,7 @@ import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { sendAdminEmail, sendUserEmail, newClientEmail, newServiceRequestEmail, kycApprovedEmail, kycRejectedEmail, paymentConfirmationDecisionEmail } from "../lib/email";
 import { logger } from "../lib/logger";
 import { createAdminSession, validateAdminSession, deleteAdminSession } from "../lib/admin-sessions";
+import { clearLoginFailures } from "../lib/login-throttle";
 
 const router = Router();
 
@@ -465,6 +466,48 @@ router.patch("/users/:id/balance", requireAdmin, async (req: Request, res: Respo
   } catch (err) {
     logger.error({ err }, "Failed to update user balance");
     res.status(500).json({ error: "Failed to update user balance" });
+  }
+});
+
+// Clear the per-account sign-in failure counter for a user. Used by the
+// admin "Unlock sign-in" action so that a customer who locked themselves
+// out (typo, forgotten password) can immediately retry without waiting
+// for the 15-minute window to expire. Idempotent: returns success even
+// if the account had no active failures recorded.
+router.post("/users/:id/unlock-login", requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const id = Number.parseInt(String(rawId ?? ""), 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "Invalid user id" });
+      return;
+    }
+
+    const [user] = await db
+      .select({ id: users.id, name: users.name, email: users.email })
+      .from(users)
+      .where(eq(users.id, id));
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    // The server-side throttle keys failures by the normalized email used
+    // at sign-in time (lowercased). Match that here so the clear actually
+    // hits the same bucket.
+    const key = user.email.trim().toLowerCase();
+    clearLoginFailures(key);
+
+    await db.insert(adminActivityLog).values({
+      eventType: "user_login_unlocked",
+      description: `Admin cleared sign-in lockout for ${user.name} (${user.email})`,
+      metadata: { userId: user.id, email: user.email },
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    logger.error({ err }, "Failed to clear sign-in lockout");
+    res.status(500).json({ error: "Failed to clear sign-in lockout" });
   }
 });
 

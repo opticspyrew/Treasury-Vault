@@ -528,6 +528,20 @@ function UsersPage() {
   const [editForm, setEditForm] = useState({ amountUsd: "" });
   const [saving, setSaving] = useState(false);
   const [editMsg, setEditMsg] = useState("");
+  const [unlockingId, setUnlockingId] = useState<number | null>(null);
+  const [unlockMsg, setUnlockMsg] = useState("");
+
+  const unlockLogin = async (u: User) => {
+    setUnlockingId(u.id); setUnlockMsg("");
+    try {
+      await api.unlockUserLogin(u.id);
+      setUnlockMsg(`✓ Sign-in unlocked for ${u.email}. They can retry immediately.`);
+    } catch (err) {
+      setUnlockMsg(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setUnlockingId(null);
+    }
+  };
 
   const load = () => {
     api.getUsers()
@@ -568,6 +582,12 @@ function UsersPage() {
         <h2 className="text-xl font-bold text-foreground">Registered Users</h2>
         <p className="text-sm text-muted-foreground">All CryptoVault accounts. Password material is never sent to the browser.</p>
       </div>
+      {unlockMsg && (
+        <div className={cn("p-3 rounded-lg text-sm border flex items-start gap-2", unlockMsg.startsWith("Error") ? "bg-red-50 text-red-700 border-red-200" : "bg-emerald-50 text-emerald-700 border-emerald-200")}>
+          <span className="flex-1">{unlockMsg}</span>
+          <button onClick={() => setUnlockMsg("")} className="opacity-60 hover:opacity-100" aria-label="Dismiss">✕</button>
+        </div>
+      )}
       <div className="bg-card border border-card-border rounded-xl overflow-hidden">
         {loading ? (
           <p className="px-5 py-8 text-center text-muted-foreground text-sm">Loading...</p>
@@ -598,6 +618,14 @@ function UsersPage() {
                         className="text-xs px-2 py-1 rounded-md bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
                       >
                         Set balance
+                      </button>
+                      <button
+                        onClick={() => void unlockLogin(u)}
+                        disabled={unlockingId === u.id}
+                        title="Clear this account's sign-in failure counter so the user can retry immediately"
+                        className="text-xs px-2 py-1 rounded-md bg-amber-100 text-amber-800 hover:bg-amber-200 transition-colors border border-amber-200 disabled:opacity-60"
+                      >
+                        {unlockingId === u.id ? "Unlocking…" : "Unlock sign-in"}
                       </button>
                       <button
                         onClick={() => setExpanded(expanded === u.id ? null : u.id)}
