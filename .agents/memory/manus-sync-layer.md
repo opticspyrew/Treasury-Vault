@@ -116,8 +116,9 @@ stale `manus_case_id` links left in our dev DB from July staging tests (unique
 constraint blocks the link; case exists remotely but records "pending...failed
 to persist link"). Stale sandbox-era links were nulled; if the partner redeploys
 and resets IDs again, expect the same collision and null stale links first.
-Outbound is enabled in DEVELOPMENT only (`MANUS_OUTBOUND_SYNC_ENABLED` +
-`NETSPY_API_BASE_URL` dev env vars); production stays off pending user go-ahead.
+Outbound is enabled in BOTH environments (`MANUS_OUTBOUND_SYNC_ENABLED` +
+`NETSPY_API_BASE_URL` set in dev and production, 2026-07-31); production takes
+effect only after the user republishes the tRPC wire-format client fixes.
 **Inbound payloads:** map `case.updated`/`case.synced`/`blockchain.data.updated` in
 processWebhookEvent only from concrete field specs, never a summary; until then they
 stay logged+acked (no guessing).
