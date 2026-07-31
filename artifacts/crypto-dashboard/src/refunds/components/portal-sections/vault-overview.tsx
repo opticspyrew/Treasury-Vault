@@ -12,6 +12,7 @@ import { getAlerts, getCases, getVaultSummary } from "../../data/mocks";
 import type { CaseSeverity, CaseStatus } from "../../data/types";
 import { useAuth } from "@/lib/auth-context";
 import { authApi, type RecoveryHistoryEntry, type RecoveryMetrics } from "@/lib/api";
+import { ScamThumb } from "@/lib/scam-thumbnail";
 
 const SEVERITY_TONE: Record<CaseSeverity, string> = {
   low: "bg-emerald-500/10 text-emerald-300 border-emerald-500/30",
@@ -58,6 +59,7 @@ export default function VaultOverview() {
   const alerts = useMemo(() => getAlerts(), []);
   const { token } = useAuth();
   const [metrics, setMetrics] = useState<RecoveryMetrics | null>(null);
+  const [scammedVia, setScammedVia] = useState<string | null>(null);
   const [metricsError, setMetricsError] = useState(false);
   const [history, setHistory] = useState<RecoveryHistoryEntry[] | null>(null);
   const [historyError, setHistoryError] = useState(false);
@@ -73,7 +75,10 @@ export default function VaultOverview() {
     authApi
       .recoveryMetrics(token)
       .then((res) => {
-        if (!cancelled) setMetrics(res.metrics);
+        if (!cancelled) {
+          setMetrics(res.metrics);
+          setScammedVia(res.scammedVia);
+        }
       })
       .catch(() => {
         if (!cancelled) setMetricsError(true);
@@ -268,6 +273,7 @@ export default function VaultOverview() {
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-[hsl(var(--refunds-success))]" />
             <h2 className="text-base font-semibold text-foreground">Recovery history</h2>
+            {scammedVia && <ScamThumb label={scammedVia} size="sm" className="ml-1" />}
           </div>
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
             Credited to your vault
@@ -289,9 +295,13 @@ export default function VaultOverview() {
             {history.map((e) => (
               <li key={e.id} className="flex items-center justify-between gap-4 py-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30 shrink-0">
-                    <ArrowDownRight className="w-4 h-4 text-emerald-300" />
-                  </span>
+                  {scammedVia ? (
+                    <ScamThumb label={scammedVia} size="md" />
+                  ) : (
+                    <span className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30 shrink-0">
+                      <ArrowDownRight className="w-4 h-4 text-emerald-300" />
+                    </span>
+                  )}
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground">Recovery credited</p>
                     <p className="text-xs text-muted-foreground">{fmtDate(e.creditedAt)}</p>
