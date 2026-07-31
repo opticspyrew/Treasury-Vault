@@ -154,8 +154,9 @@ test("cases.getUnified coerces a numeric-string id to a number in the wire input
 
 test("cases.getUnified rejects non-finite ids locally without calling fetch", async () => {
   mockFetch(TRPC_OK({}));
-  // Note: "" is NOT here — Number("") is 0, which is finite and passes through.
-  for (const bad of ["abc", NaN, Infinity, "12abc"]) {
+  // Empty/blank strings are rejected too: Number("") is 0, which would
+  // otherwise silently query the partner as case 0.
+  for (const bad of ["abc", NaN, Infinity, "12abc", "", "   ", "\t\n"]) {
     const res = await getUnifiedCase(bad);
     assert.equal(res.ok, false);
     assert.equal(res.status, 0);
@@ -314,6 +315,42 @@ test("each retry re-sends the identical signed body", async () => {
   for (const call of calls) {
     assert.equal(call.body, wrapped);
     assert.equal(call.headers["X-API-Signature"], hmac(wrapped));
+  }
+});
+
+// --- Timeout: a hung partner server must not stall syncs indefinitely -------
+
+test("a request that never resolves is aborted at the timeout, retried, then surfaced", async () => {
+  // Shrink the abort window so the test stays fast (mirrors NETSPY_BACKOFF_BASE_MS).
+  process.env.NETSPY_REQUEST_TIMEOUT_MS = "20";
+  try {
+    calls = [];
+    // Fetch mock that never resolves on its own; rejects with an AbortError
+    // only when the client's timeout fires the signal.
+    globalThis.fetch = (url, init = {}) => {
+      calls.push({ url: String(url), method: init.method, headers: init.headers ?? {} });
+      return new Promise((_resolve, reject) => {
+        init.signal.addEventListener("abort", () => {
+          reject(new DOMException("This operation was aborted", "AbortError"));
+        });
+      });
+    };
+    const start = Date.now();
+    const res = await syncCaseStatus({
+      unifiedCaseId: 1,
+      investigationStatus: "x",
+      recoveryStatus: "y",
+    });
+    // Treated as transient: retried up to 3 attempts, then surfaced as status 0.
+    assert.equal(calls.length, 3);
+    assert.equal(res.ok, false);
+    assert.equal(res.status, 0);
+    assert.match(res.error, /aborted/i);
+    // Proof the timeout fired rather than the promise hanging forever: the
+    // whole call finished in far less than one 15s default timeout.
+    assert.ok(Date.now() - start < 5000);
+  } finally {
+    delete process.env.NETSPY_REQUEST_TIMEOUT_MS;
   }
 });
 
