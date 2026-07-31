@@ -6,6 +6,7 @@ import {
   passwordResetTokens,
   adminClients,
   adminServiceRequests,
+  adminActivityLog,
 } from "@workspace/db";
 import { and, eq, isNull, gt, desc, ne, sql } from "drizzle-orm";
 import {
@@ -1002,6 +1003,81 @@ router.get("/recovery-metrics", async (req: Request, res: Response): Promise<voi
   } catch (err) {
     logger.error({ err }, "Failed to load recovery metrics");
     res.status(500).json({ error: "Failed to load recovery metrics." });
+  }
+});
+
+// Per-user ledger of recovery credits. Each admin "record recovery" action
+// writes a `user_recovery_recorded` row to admin_activity_log with the target
+// userId in metadata; this endpoint exposes only the caller's own entries so
+// the Recovery Portal can render a credit-by-credit timeline.
+router.get("/recovery-history", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const token = extractBearerToken(req);
+    if (!token) {
+      res.status(401).json({ error: "Not authenticated." });
+      return;
+    }
+    const user = await findUserBySessionToken(token);
+    if (!user) {
+      res.status(401).json({ error: "Session expired. Please sign in again." });
+      return;
+    }
+
+    // Cursor pagination (newest first): `before` is the id of the oldest entry
+    // the client already has; we return the next page strictly older than it.
+    // Fetch one extra row to know whether more pages remain.
+    const PAGE_SIZE = 50;
+    const rawBefore = req.query.before;
+    const before = Number.parseInt(String(Array.isArray(rawBefore) ? rawBefore[0] : rawBefore ?? ""), 10);
+    const cursorFilter =
+      Number.isInteger(before) && before > 0
+        ? sql` AND ${adminActivityLog.id} < ${before}`
+        : sql``;
+
+    const rows = await db
+      .select({
+        id: adminActivityLog.id,
+        metadata: adminActivityLog.metadata,
+        createdAt: adminActivityLog.createdAt,
+      })
+      .from(adminActivityLog)
+      .where(
+        sql`${adminActivityLog.eventType} = 'user_recovery_recorded' AND (${adminActivityLog.metadata}->>'userId')::int = ${user.id}${cursorFilter}`,
+      )
+      .orderBy(desc(adminActivityLog.id))
+      .limit(PAGE_SIZE + 1);
+
+    const hasMore = rows.length > PAGE_SIZE;
+    const page = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
+
+    // Project only the fields the client needs; never leak the admin-facing
+    // description or unrelated metadata keys.
+    const entries = page
+      .map((r) => {
+        const meta = (r.metadata ?? {}) as Record<string, unknown>;
+        const amountUsd = typeof meta.amountUsd === "number" ? meta.amountUsd : Number(meta.amountUsd);
+        const runningTotalUsd =
+          typeof meta.recoveredUsd === "number" ? meta.recoveredUsd : null;
+        if (!Number.isFinite(amountUsd)) return null;
+        return {
+          id: r.id,
+          amountUsd,
+          runningTotalUsd,
+          creditedAt: r.createdAt.toISOString(),
+        };
+      })
+      .filter((e): e is NonNullable<typeof e> => e !== null);
+
+    res.json({
+      entries,
+      hasMore,
+      // Cursor for the next (older) page: the id of the last raw row in this
+      // page, regardless of whether its metadata parsed cleanly.
+      nextCursor: hasMore ? page[page.length - 1].id : null,
+    });
+  } catch (err) {
+    logger.error({ err }, "Failed to load recovery history");
+    res.status(500).json({ error: "Failed to load recovery history." });
   }
 });
 
