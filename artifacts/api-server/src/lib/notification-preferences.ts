@@ -8,6 +8,7 @@ import type { NotificationPreferences } from "@workspace/db";
 export const NOTIFICATION_DEFAULTS: NotificationPreferences = {
   kycDecisions: true,
   newSignIn: true,
+  recoveryCredits: true,
 };
 
 /**
@@ -21,5 +22,6 @@ export function resolveNotificationPreferences(
   return {
     kycDecisions: raw?.kycDecisions ?? NOTIFICATION_DEFAULTS.kycDecisions,
     newSignIn: raw?.newSignIn ?? NOTIFICATION_DEFAULTS.newSignIn,
+    recoveryCredits: raw?.recoveryCredits ?? NOTIFICATION_DEFAULTS.recoveryCredits,
   };
 }

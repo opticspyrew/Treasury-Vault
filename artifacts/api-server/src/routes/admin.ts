@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { db } from "@workspace/db";
 import { adminClients, adminServiceRequests, adminActivityLog, users, cryptoWalletConfigs, coinSectionOrders, kycSubmissions } from "@workspace/db";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
-import { sendAdminEmail, sendUserEmail, newClientEmail, newServiceRequestEmail, kycApprovedEmail, kycRejectedEmail, paymentConfirmationDecisionEmail } from "../lib/email";
+import { sendAdminEmail, sendUserEmail, newClientEmail, newServiceRequestEmail, kycApprovedEmail, kycRejectedEmail, paymentConfirmationDecisionEmail, recoveryCreditedEmail } from "../lib/email";
 import { logger } from "../lib/logger";
 import { createAdminSession, validateAdminSession, deleteAdminSession } from "../lib/admin-sessions";
 import { clearLoginFailures, getAccountThrottleStatus } from "../lib/login-throttle";
@@ -588,6 +588,41 @@ router.post("/users/:id/record-recovery", requireAdmin, async (req: Request, res
       description: `Admin recorded $${amount.toLocaleString("en-US")} recovered to vault for ${updated.name} (${updated.email}); total recovered $${updated.recoveredUsd.toLocaleString("en-US")} of $${(updated.reportedLossUsd ?? 0).toLocaleString("en-US")} reported`,
       metadata: { userId: id, amountUsd: amount, recoveredUsd: updated.recoveredUsd, reportedLossUsd: updated.reportedLossUsd },
     });
+
+    // Proactive good-news email: tell the client the moment a recovery is
+    // credited so they don't have to log in to find out. Failures are logged
+    // but never block the admin action (matches existing notification
+    // patterns), and the user's notification preferences are respected.
+    if (
+      updated.email &&
+      resolveNotificationPreferences(user.notificationPreferences).recoveryCredits
+    ) {
+      try {
+        const appUrl = buildAdminAppUrl(req);
+        const { subject, html } = recoveryCreditedEmail({
+          name: updated.name,
+          email: updated.email,
+          amountUsd: amount,
+          totalRecoveredUsd: updated.recoveredUsd,
+          reportedLossUsd: updated.reportedLossUsd ?? 0,
+          creditedAt: new Date(),
+          portalUrl: appUrl ? `${appUrl}/refunds/portal` : null,
+          supportEmail: SUPPORT_EMAIL,
+        });
+        const sent = await sendUserEmail(updated.email, subject, html);
+        logger.info(
+          { userId: id, amountUsd: amount, sent },
+          sent
+            ? "Recovery credited email sent"
+            : "Recovery credited email could not be sent",
+        );
+      } catch (err) {
+        logger.error(
+          { err, userId: id, amountUsd: amount },
+          "Failed to send recovery credited email",
+        );
+      }
+    }
 
     res.json({ user: updated });
   } catch (err) {

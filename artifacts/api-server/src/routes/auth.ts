@@ -1219,6 +1219,8 @@ router.patch("/preferences", async (req: Request, res: Response): Promise<void> 
         typeof body.kycDecisions === "boolean" ? body.kycDecisions : current.kycDecisions,
       newSignIn:
         typeof body.newSignIn === "boolean" ? body.newSignIn : current.newSignIn,
+      recoveryCredits:
+        typeof body.recoveryCredits === "boolean" ? body.recoveryCredits : current.recoveryCredits,
     };
 
     await db
