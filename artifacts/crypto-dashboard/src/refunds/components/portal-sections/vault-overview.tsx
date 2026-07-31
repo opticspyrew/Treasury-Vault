@@ -11,7 +11,8 @@ import {
 import { getAlerts, getCases, getVaultSummary } from "../../data/mocks";
 import type { CaseSeverity, CaseStatus } from "../../data/types";
 import { useAuth } from "@/lib/auth-context";
-import { authApi, type RecoveryMetrics } from "@/lib/api";
+import { authApi, type RecoveryHistoryEntry, type RecoveryMetrics } from "@/lib/api";
+import { ScamThumb } from "@/lib/scam-thumbnail";
 
 const SEVERITY_TONE: Record<CaseSeverity, string> = {
   low: "bg-emerald-500/10 text-emerald-300 border-emerald-500/30",
@@ -32,6 +33,14 @@ function fmtUsd(value: number) {
   return value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
 
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function fmtRelative(iso: string) {
   if (!iso) return "—";
   const now = new Date("2026-05-27T04:00:00Z").getTime();
@@ -50,7 +59,12 @@ export default function VaultOverview() {
   const alerts = useMemo(() => getAlerts(), []);
   const { token } = useAuth();
   const [metrics, setMetrics] = useState<RecoveryMetrics | null>(null);
+  const [scammedVia, setScammedVia] = useState<string | null>(null);
   const [metricsError, setMetricsError] = useState(false);
+  const [history, setHistory] = useState<RecoveryHistoryEntry[] | null>(null);
+  const [historyError, setHistoryError] = useState(false);
+  const [historyCursor, setHistoryCursor] = useState<number | null>(null);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
 
   useEffect(() => {
     // Personal figures documented at signup/intake replace the synthetic demo
@@ -61,10 +75,24 @@ export default function VaultOverview() {
     authApi
       .recoveryMetrics(token)
       .then((res) => {
-        if (!cancelled) setMetrics(res.metrics);
+        if (!cancelled) {
+          setMetrics(res.metrics);
+          setScammedVia(res.scammedVia);
+        }
       })
       .catch(() => {
         if (!cancelled) setMetricsError(true);
+      });
+    authApi
+      .recoveryHistory(token)
+      .then((res) => {
+        if (!cancelled) {
+          setHistory(res.entries);
+          setHistoryCursor(res.hasMore ? res.nextCursor : null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setHistoryError(true);
       });
     return () => {
       cancelled = true;
@@ -238,6 +266,82 @@ export default function VaultOverview() {
             })}
           </ul>
         </div>
+      </section>
+
+      <section className="refunds-glass rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-[hsl(var(--refunds-success))]" />
+            <h2 className="text-base font-semibold text-foreground">Recovery history</h2>
+            {scammedVia && <ScamThumb label={scammedVia} size="sm" className="ml-1" />}
+          </div>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+            Credited to your vault
+          </span>
+        </div>
+
+        {historyError ? (
+          <p className="text-sm text-muted-foreground">
+            Couldn't load your recovery history. Please refresh the page to try again.
+          </p>
+        ) : history === null ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : history.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No recoveries credited yet. Each recovery our team credits to your vault will appear here.
+          </p>
+        ) : (
+          <ul className="divide-y divide-card-border/60">
+            {history.map((e) => (
+              <li key={e.id} className="flex items-center justify-between gap-4 py-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  {scammedVia ? (
+                    <ScamThumb label={scammedVia} size="md" />
+                  ) : (
+                    <span className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30 shrink-0">
+                      <ArrowDownRight className="w-4 h-4 text-emerald-300" />
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">Recovery credited</p>
+                    <p className="text-xs text-muted-foreground">{fmtDate(e.creditedAt)}</p>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-semibold font-mono tabular-nums text-[hsl(var(--refunds-success))]">
+                    +{fmtUsd(e.amountUsd)}
+                  </p>
+                  {e.runningTotalUsd !== null && (
+                    <p className="text-[11px] text-muted-foreground font-mono tabular-nums">
+                      total {fmtUsd(e.runningTotalUsd)}
+                    </p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {historyCursor !== null && (
+          <button
+            type="button"
+            disabled={historyLoadingMore || !token}
+            onClick={() => {
+              if (!token || historyCursor === null) return;
+              setHistoryLoadingMore(true);
+              authApi
+                .recoveryHistory(token, historyCursor)
+                .then((res) => {
+                  setHistory((prev) => [...(prev ?? []), ...res.entries]);
+                  setHistoryCursor(res.hasMore ? res.nextCursor : null);
+                })
+                .catch(() => setHistoryError(true))
+                .finally(() => setHistoryLoadingMore(false));
+            }}
+            className="mt-4 w-full py-2 rounded-lg text-xs font-semibold uppercase tracking-wider border border-card-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors disabled:opacity-50"
+          >
+            {historyLoadingMore ? "Loading…" : "Load older recoveries"}
+          </button>
+        )}
       </section>
     </div>
   );

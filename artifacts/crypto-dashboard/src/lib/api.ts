@@ -111,6 +111,13 @@ export interface AuthUser {
   needsIntake?: boolean;
 }
 
+export interface RecoveryHistoryEntry {
+  id: number;
+  amountUsd: number;
+  runningTotalUsd: number | null;
+  creditedAt: string;
+}
+
 export interface RecoveryMetrics {
   reportedLossUsd: number;
   recoveredUsd: number;
@@ -257,6 +264,21 @@ export const authApi = {
       const err = await res.json().catch(() => ({ error: res.statusText }));
       throw new Error(err.error || "Failed to sign out that device");
     }
+  },
+
+  recoveryHistory: async (
+    token: string,
+    before?: number,
+  ): Promise<{ entries: RecoveryHistoryEntry[]; hasMore: boolean; nextCursor: number | null }> => {
+    const qs = before ? `?before=${before}` : "";
+    const res = await fetch(`${AUTH_BASE}/recovery-history${qs}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || "Failed to load recovery history");
+    }
+    return res.json();
   },
 
   recoveryMetrics: async (token: string): Promise<{ metrics: RecoveryMetrics; scammedVia: string | null }> => {

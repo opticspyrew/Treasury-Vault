@@ -543,6 +543,10 @@ function UsersPage() {
   const [recoveryForm, setRecoveryForm] = useState({ amountUsd: "" });
   const [recoverySaving, setRecoverySaving] = useState(false);
   const [recoveryMsg, setRecoveryMsg] = useState("");
+  const [adjusting, setAdjusting] = useState<User | null>(null);
+  const [adjustForm, setAdjustForm] = useState({ recoveredUsd: "", reason: "" });
+  const [adjustSaving, setAdjustSaving] = useState(false);
+  const [adjustMsg, setAdjustMsg] = useState("");
   // Drives a 1s re-render so the "Xm left" countdown ticks down between
   // polls without needing another network round-trip.
   const [, setNowTick] = useState(0);
@@ -604,6 +608,30 @@ function UsersPage() {
     } catch (err) {
       setRecoveryMsg(`Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally { setRecoverySaving(false); }
+  };
+
+  const openAdjust = (u: User) => {
+    setAdjustForm({ recoveredUsd: String(u.recoveredUsd ?? 0), reason: "" });
+    setAdjustMsg("");
+    setAdjusting(u);
+  };
+
+  const submitAdjust = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adjusting) return;
+    const usd = Number(adjustForm.recoveredUsd);
+    if (!Number.isFinite(usd) || usd < 0) {
+      setAdjustMsg("Error: enter a non-negative amount");
+      return;
+    }
+    setAdjustSaving(true); setAdjustMsg("");
+    try {
+      await api.adjustUserRecovery(adjusting.id, { recoveredUsd: usd, reason: adjustForm.reason.trim() || undefined });
+      setAdjusting(null);
+      load();
+    } catch (err) {
+      setAdjustMsg(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    } finally { setAdjustSaving(false); }
   };
 
   const submitEdit = async (e: React.FormEvent) => {
@@ -716,6 +744,19 @@ function UsersPage() {
                         data-testid={`record-recovery-${u.id}`}
                       >
                         Record recovery
+                      </button>
+                      <button
+                        onClick={() => openAdjust(u)}
+                        disabled={u.reportedLossUsd == null || (u.recoveredUsd ?? 0) <= 0}
+                        title={u.reportedLossUsd == null
+                          ? "This user has no documented reported loss yet."
+                          : (u.recoveredUsd ?? 0) <= 0
+                            ? "Nothing recorded as recovered yet — there is no amount to correct."
+                            : "Correct a mistyped recovery amount. Sets the recovered total to the value you enter and records the change in the activity log."}
+                        className="text-xs px-2 py-1 rounded-md bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        data-testid={`adjust-recovery-${u.id}`}
+                      >
+                        Adjust recovery
                       </button>
                       <button
                         onClick={() => void unlockLogin(u)}
@@ -852,6 +893,52 @@ function UsersPage() {
             <div className="flex gap-3 justify-end pt-1">
               <button type="button" onClick={() => setRecovering(null)} className="px-4 py-2 text-sm font-medium text-foreground bg-muted border border-border rounded-lg hover:bg-secondary transition-colors">Cancel</button>
               <button type="submit" disabled={recoverySaving} className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-60">{recoverySaving ? "Saving..." : "Record recovery"}</button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      <Modal open={adjusting !== null} onClose={() => setAdjusting(null)} title={adjusting ? `Adjust recovery — ${adjusting.name}` : "Adjust recovery"}>
+        {adjusting && (
+          <form onSubmit={submitAdjust} className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              Corrects a mistyped recovery credit. Enter the corrected <span className="font-semibold">total</span> recovered amount — it can be lower than the current total (down to $0) but never above the reported loss. The change is recorded in the activity log.
+            </p>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="p-2 rounded-lg bg-muted border border-border">
+                <p className="text-muted-foreground">Reported loss</p>
+                <p className="font-semibold text-foreground">{adjusting.reportedLossUsd != null ? fmtUsd(adjusting.reportedLossUsd) : "—"}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-muted border border-border">
+                <p className="text-muted-foreground">Current recovered</p>
+                <p className="font-semibold text-emerald-700">{fmtUsd(adjusting.recoveredUsd ?? 0)}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-muted border border-border">
+                <p className="text-muted-foreground">At risk</p>
+                <p className="font-semibold text-amber-700">{fmtUsd(Math.max(0, (adjusting.reportedLossUsd ?? 0) - (adjusting.recoveredUsd ?? 0)))}</p>
+              </div>
+            </div>
+            <Input
+              label="Corrected recovered total (USD)"
+              type="number"
+              min="0"
+              step="0.01"
+              max={adjusting.reportedLossUsd != null ? String(adjusting.reportedLossUsd) : undefined}
+              value={adjustForm.recoveredUsd}
+              onChange={e => setAdjustForm(f => ({ ...f, recoveredUsd: e.target.value }))}
+              placeholder="0.00"
+              required
+            />
+            <Input
+              label="Reason (recorded in audit log)"
+              value={adjustForm.reason}
+              onChange={e => setAdjustForm(f => ({ ...f, reason: e.target.value }))}
+              placeholder="e.g. typo — entered $5,000 instead of $500"
+            />
+            {adjustMsg && <p className={cn("text-xs", adjustMsg.startsWith("Error") ? "text-red-600" : "text-emerald-600")}>{adjustMsg}</p>}
+            <div className="flex gap-3 justify-end pt-1">
+              <button type="button" onClick={() => setAdjusting(null)} className="px-4 py-2 text-sm font-medium text-foreground bg-muted border border-border rounded-lg hover:bg-secondary transition-colors">Cancel</button>
+              <button type="submit" disabled={adjustSaving} className="px-4 py-2 text-sm font-semibold text-white bg-amber-500 rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-60" data-testid="adjust-recovery-save">{adjustSaving ? "Saving..." : "Save correction"}</button>
             </div>
           </form>
         )}

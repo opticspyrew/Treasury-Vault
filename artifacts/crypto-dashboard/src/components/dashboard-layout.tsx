@@ -1,7 +1,68 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { useCurrency, CURRENCIES, type CurrencyCode } from "@/lib/currency-context";
+import { useRecoveryOverview } from "@/hooks/use-recovery-overview";
+import { ScamThumb } from "@/lib/scam-thumbnail";
+import { authApi, type AuthSessionRecord } from "@/lib/api";
+
+/** Compact "Recent activity" list shown in the sidebar next to the brand. */
+function SidebarRecentActivity() {
+  const { token } = useAuth();
+  const [sessions, setSessions] = useState<AuthSessionRecord[] | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    authApi
+      .sessions(token)
+      .then((res) => {
+        if (!cancelled) setSessions(res.sessions.slice(0, 3));
+      })
+      .catch(() => {
+        if (!cancelled) setSessions([]);
+      });
+    return () => { cancelled = true; };
+  }, [token]);
+
+  const [, navigate] = useLocation();
+
+  if (!sessions || sessions.length === 0) return null;
+
+  return (
+    <div className="mt-3 pt-3 border-t border-sidebar-border" data-testid="sidebar-recent-activity">
+      <div className="flex items-center justify-between px-4 mb-2">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          Recent activity
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate("/connected-accounts")}
+          className="text-[10px] font-semibold text-primary hover:underline"
+          data-testid="sidebar-recent-activity-manage"
+        >
+          Manage
+        </button>
+      </div>
+      <ul className="space-y-1">
+        {sessions.map((s) => (
+          <li key={s.id} className="flex items-center gap-2.5 px-4 py-1.5">
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.current ? "bg-primary" : "bg-muted-foreground/40"}`} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-xs text-foreground truncate">
+                {s.current ? "This device" : "Sign-in"}
+              </span>
+              <span className="block text-[10px] text-muted-foreground truncate">
+                {new Date(s.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                {s.location ? ` • ${s.location}` : ""}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -64,10 +125,38 @@ const navItems = [
 
 export default function DashboardLayout({ children, activeTab }: LayoutProps) {
   const [, navigate] = useLocation();
-  const { user, logout, portalAccess } = useAuth();
+  const { user, logout } = useAuth();
   const { currency, setCurrency, btcPriceUsd, ratesLoading } = useCurrency();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const { scammedVia } = useRecoveryOverview();
+
+  // Hidden gesture: tapping the logo 4 times in quick succession opens the
+  // Refunds Portal (replaces the old visible sidebar button).
+  const logoTaps = useRef<{ count: number; timer: number | null }>({ count: 0, timer: null });
+  useEffect(() => {
+    // Clear any pending tap-reset timer when the layout unmounts.
+    const state = logoTaps.current;
+    return () => {
+      if (state.timer) window.clearTimeout(state.timer);
+    };
+  }, []);
+  const handleLogoTap = () => {
+    const state = logoTaps.current;
+    state.count += 1;
+    if (state.timer) window.clearTimeout(state.timer);
+    if (state.count >= 4) {
+      state.count = 0;
+      state.timer = null;
+      setSidebarOpen(false);
+      navigate("/refunds/portal");
+      return;
+    }
+    state.timer = window.setTimeout(() => {
+      state.count = 0;
+      state.timer = null;
+    }, 1500);
+  };
 
   const handleLogout = () => {
     logout();
@@ -90,17 +179,55 @@ export default function DashboardLayout({ children, activeTab }: LayoutProps) {
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
-        {/* Logo */}
-        <div className="flex items-center px-4 py-3 border-b border-sidebar-border">
-          <img
-            src="/treasury-vault-logo.jpg"
-            alt="Treasury Vault"
-            className="h-10 w-auto rounded-lg bg-white object-contain"
-          />
+        {/* Brand area: logo (tap 4x for Refunds Portal) + name + Overview */}
+        <div className="px-4 py-3 border-b border-sidebar-border space-y-3">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleLogoTap}
+              aria-label="Treasury Vault"
+              data-testid="brand-logo"
+              className="flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg select-none"
+            >
+              <img
+                src="/treasury-vault-logo.jpg"
+                alt="Treasury Vault"
+                draggable={false}
+                className="h-10 w-auto rounded-lg bg-white object-contain pointer-events-none"
+              />
+            </button>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-foreground leading-tight">Treasury Vault</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Secure custody</p>
+            </div>
+          </div>
+
+          {/* Prominent Overview button — always first, bold, with the
+              documented scam asset/payment method as its thumbnail */}
+          <button
+            type="button"
+            onClick={() => { navigate("/dashboard"); setSidebarOpen(false); }}
+            data-testid="nav-overview"
+            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-all border ${
+              activeTab === "dashboard"
+                ? "bg-primary/15 text-primary border-primary/30"
+                : "bg-primary/[0.06] text-foreground border-primary/20 hover:bg-primary/10 hover:border-primary/40"
+            }`}
+          >
+            {scammedVia ? (
+              <ScamThumb label={scammedVia} size="sm" />
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+              </svg>
+            )}
+            <span className="flex-1 text-left">Overview</span>
+          </button>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map(item => (
             <button
               key={item.id}
@@ -121,30 +248,9 @@ export default function DashboardLayout({ children, activeTab }: LayoutProps) {
             </button>
           ))}
 
-          {/* Refunds Portal — only visible to approved/active clients */}
-          {portalAccess && (
-            <div className="mt-3 pt-3 border-t border-sidebar-border">
-              <button
-                type="button"
-                onClick={() => { navigate("/refunds"); setSidebarOpen(false); }}
-                data-testid="nav-refunds-portal"
-                className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-primary/25 bg-primary/[0.06] hover:bg-primary/10 hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all"
-              >
-                <span className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center text-primary flex-shrink-0">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                </span>
-                <span className="flex-1 text-left min-w-0">
-                  <span className="block text-sm font-semibold text-foreground">Refunds Portal</span>
-                  <span className="block text-[11px] text-muted-foreground truncate">Crypto asset recovery</span>
-                </span>
-                <svg className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
-          )}
+          {/* Refunds Portal is intentionally hidden from the nav — it opens
+              by tapping the Treasury Vault logo four times. */}
+          <SidebarRecentActivity />
         </nav>
 
         {/* User section */}

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import DashboardLayout from "@/components/dashboard-layout";
+import RecentActivityPanel from "@/components/recent-activity-panel";
 import { useAuth } from "@/lib/auth-context";
 import {
   socialAuthApi,
@@ -189,6 +190,13 @@ export default function ConnectedAccounts() {
             to keep a backup sign-in method.
           </p>
         )}
+
+        {/* Full session management (device list, sign out other devices) —
+            the dashboard now shows only a compact summary in the sidebar,
+            so the complete controls live here. */}
+        <div className="mt-6">
+          <RecentActivityPanel />
+        </div>
       </div>
     </DashboardLayout>
   );

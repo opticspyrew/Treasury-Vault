@@ -61,6 +61,8 @@ export const api = {
     req<{ success: boolean }>("POST", `/users/${id}/unlock-login`),
   recordUserRecovery: (id: number, data: { amountUsd: number }) =>
     req<{ user: User }>("POST", `/users/${id}/record-recovery`, data),
+  adjustUserRecovery: (id: number, data: { recoveredUsd: number; reason?: string }) =>
+    req<{ user: User }>("POST", `/users/${id}/adjust-recovery`, data),
 
   getWalletConfigs: () => req<{ configs: WalletConfig[] }>("GET", "/wallet-configs"),
   createWalletConfig: (data: { symbol: string; network: string; address: string; label?: string; sortOrder?: number }) =>

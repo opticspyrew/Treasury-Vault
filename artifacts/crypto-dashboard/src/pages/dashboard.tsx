@@ -4,7 +4,7 @@ import DashboardLayout from "@/components/dashboard-layout";
 import WalletModal from "@/components/wallet-modal";
 import KycModal from "@/components/kyc-modal";
 import { useKyc } from "@/hooks/use-kyc";
-import RecentActivityPanel from "@/components/recent-activity-panel";
+import OverviewGraphPanel from "@/components/overview-graph-panel";
 import TransactionReceiptModal from "@/components/transaction-receipt";
 import { useTransactions, saveInvoiceContext, useBlockConfirmations, type Transaction } from "@/hooks/use-transactions";
 import { useBalance } from "@/hooks/use-balance";
@@ -244,8 +244,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Recent Activity */}
-        <RecentActivityPanel />
+        {/* Overview graph — recent activity moved to the sidebar */}
+        <OverviewGraphPanel />
 
         {/* Transaction History */}
         <div className="bg-card border border-card-border rounded-2xl p-6">

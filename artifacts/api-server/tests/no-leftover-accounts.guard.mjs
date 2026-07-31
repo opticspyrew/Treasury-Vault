@@ -34,7 +34,12 @@ const PACKAGE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // The email prefixes the tracked suites use for the accounts they create.
 // social-disconnect.test.mjs -> social-<rnd>@example.com
 // kyc-flow.test.mjs          -> kycflow-<rnd>@example.com
-const PATTERNS = ["social-%@example.com", "kycflow-%@example.com"];
+const PATTERNS = [
+  "social-%@example.com",
+  "kycflow-%@example.com",
+  "intake-amt-%@example.com",
+  "recovery-flow-%@example.com",
+];
 const TABLES = ["users", "admin_clients"];
 
 // Returns a map like { "users|social-%@example.com": 3, ... } so each
