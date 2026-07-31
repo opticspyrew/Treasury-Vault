@@ -107,6 +107,17 @@ export interface AuthUser {
   name: string;
   /** True when the user's admin_clients record has status approved or active. */
   portalAccess?: boolean;
+  /** True when the user hasn't documented their loss details yet (e.g. Google signup). */
+  needsIntake?: boolean;
+}
+
+export interface RecoveryMetrics {
+  reportedLossUsd: number;
+  recoveredUsd: number;
+  atRiskUsd: number;
+  recoveryRatePct: number;
+  riskScore: number;
+  documented: boolean;
 }
 
 export interface AuthSessionResponse {
@@ -247,6 +258,24 @@ export const authApi = {
       throw new Error(err.error || "Failed to sign out that device");
     }
   },
+
+  recoveryMetrics: async (token: string): Promise<{ metrics: RecoveryMetrics; scammedVia: string | null }> => {
+    const res = await fetch(`${AUTH_BASE}/recovery-metrics`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || "Failed to load recovery metrics");
+    }
+    return res.json();
+  },
+
+  submitIntake: (token: string, data: { assetsTotalUsd?: number; scammedVia: string }) =>
+    post<{ ok: boolean; metrics: RecoveryMetrics; needsIntake: boolean }>(
+      `${AUTH_BASE}/intake`,
+      data,
+      { Authorization: `Bearer ${token}` },
+    ),
 
   exists: (email: string) =>
     post<{ exists: boolean }>(`${AUTH_BASE}/exists`, { email }),

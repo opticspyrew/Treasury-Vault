@@ -401,6 +401,9 @@ router.get("/users", requireAdmin, async (req: Request, res: Response): Promise<
         name: users.name,
         email: users.email,
         balanceBtc: users.balanceBtc,
+        reportedLossUsd: users.reportedLossUsd,
+        recoveredUsd: users.recoveredUsd,
+        scammedVia: users.scammedVia,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
       })
@@ -519,6 +522,77 @@ router.patch("/users/:id/balance", requireAdmin, async (req: Request, res: Respo
   } catch (err) {
     logger.error({ err }, "Failed to update user balance");
     res.status(500).json({ error: "Failed to update user balance" });
+  }
+});
+
+// Record a recovery credited to the vault for a user. Increments the user's
+// cumulative recovered total; the Recovery Portal derives the at-risk balance
+// as reportedLoss - recovered, so crediting here automatically moves funds
+// from "at risk" to "recovered" on the user's dashboard.
+router.post("/users/:id/record-recovery", requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const id = Number.parseInt(String(rawId ?? ""), 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "Invalid user id" });
+      return;
+    }
+
+    const body = (req.body ?? {}) as { amountUsd?: unknown };
+    const amount = typeof body.amountUsd === "number" ? body.amountUsd : Number(body.amountUsd);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      res.status(400).json({ error: "amountUsd must be a positive number" });
+      return;
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    if (user.reportedLossUsd === null) {
+      res.status(400).json({ error: "This user has no documented reported loss yet." });
+      return;
+    }
+    const remaining = Math.max(0, user.reportedLossUsd - user.recoveredUsd);
+    if (amount > remaining) {
+      res.status(400).json({
+        error: `Amount exceeds the remaining at-risk balance ($${remaining.toLocaleString("en-US")}).`,
+      });
+      return;
+    }
+
+    // Atomic conditional increment: the WHERE clause re-checks the cap inside
+    // the UPDATE itself so concurrent recovery requests cannot both pass the
+    // pre-check above and push recovered above the reported loss.
+    const [updated] = await db
+      .update(users)
+      .set({ recoveredUsd: sql`${users.recoveredUsd} + ${amount}`, updatedAt: new Date() })
+      .where(sql`${users.id} = ${id} AND ${users.reportedLossUsd} IS NOT NULL AND ${users.recoveredUsd} + ${amount} <= ${users.reportedLossUsd}`)
+      .returning({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        reportedLossUsd: users.reportedLossUsd,
+        recoveredUsd: users.recoveredUsd,
+      });
+
+    if (!updated) {
+      // Lost a race with a concurrent recovery credit — re-checked cap failed.
+      res.status(409).json({ error: "Amount exceeds the remaining at-risk balance. Please reload and try again." });
+      return;
+    }
+
+    await db.insert(adminActivityLog).values({
+      eventType: "user_recovery_recorded",
+      description: `Admin recorded $${amount.toLocaleString("en-US")} recovered to vault for ${updated.name} (${updated.email}); total recovered $${updated.recoveredUsd.toLocaleString("en-US")} of $${(updated.reportedLossUsd ?? 0).toLocaleString("en-US")} reported`,
+      metadata: { userId: id, amountUsd: amount, recoveredUsd: updated.recoveredUsd, reportedLossUsd: updated.reportedLossUsd },
+    });
+
+    res.json({ user: updated });
+  } catch (err) {
+    logger.error({ err }, "Failed to record recovery");
+    res.status(500).json({ error: "Failed to record recovery" });
   }
 });
 

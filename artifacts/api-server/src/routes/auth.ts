@@ -372,6 +372,9 @@ router.post("/signup", async (req: Request, res: Response): Promise<void> => {
       passwordIterations: hashed.passwordIterations,
       balanceBtc,
       scammedVia: scammedViaClean,
+      // Document the signup "Assets in total" figure as the user's reported
+      // loss for the Recovery Portal. Null when left blank.
+      reportedLossUsd: requestedInitialUsd,
     }).returning();
 
     const session = await createSession(user.id, captureSessionMetadata(req));
@@ -934,10 +937,158 @@ router.get("/me", async (req: Request, res: Response): Promise<void> => {
     const portalAccess =
       clientRow?.status === "approved" || clientRow?.status === "active";
 
-    res.json({ user: { ...publicUser(user), portalAccess } });
+    // Social (e.g. Google) signups skip the signup form, so they have no
+    // documented loss details yet. The SPA uses this flag to pop up the
+    // intake modal until the details are provided.
+    const needsIntake = user.reportedLossUsd === null || !user.scammedVia;
+
+    res.json({ user: { ...publicUser(user), portalAccess, needsIntake } });
   } catch (err) {
     logger.error({ err }, "Failed to load session user");
     res.status(500).json({ error: "Failed to load session." });
+  }
+});
+
+// Recovery metrics ----------------------------------------------------------
+//
+// Personal figures for the Recovery Portal dashboard. Reported loss comes
+// from the documented "Assets in total ($)" signup/intake figure; recovered
+// is the cumulative amount credited to the vault by admins; at-risk is the
+// derived remainder. The composite risk score is derived from how much of
+// the reported loss is still at risk.
+
+export function computeRecoveryMetrics(user: {
+  reportedLossUsd: number | null;
+  recoveredUsd: number;
+}): {
+  reportedLossUsd: number;
+  recoveredUsd: number;
+  atRiskUsd: number;
+  recoveryRatePct: number;
+  riskScore: number;
+  documented: boolean;
+} {
+  const reported = user.reportedLossUsd ?? 0;
+  const recovered = Math.min(Math.max(user.recoveredUsd ?? 0, 0), reported > 0 ? reported : user.recoveredUsd ?? 0);
+  const atRisk = Math.max(0, reported - recovered);
+  const recoveryRatePct = reported > 0 ? Math.round((recovered / reported) * 100) : 0;
+  // Higher share of funds still at risk -> higher composite risk score.
+  const riskScore = reported > 0
+    ? Math.min(95, Math.max(5, Math.round((atRisk / reported) * 90) + 5))
+    : 0;
+  return {
+    reportedLossUsd: reported,
+    recoveredUsd: recovered,
+    atRiskUsd: atRisk,
+    recoveryRatePct,
+    riskScore,
+    documented: user.reportedLossUsd !== null,
+  };
+}
+
+router.get("/recovery-metrics", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const token = extractBearerToken(req);
+    if (!token) {
+      res.status(401).json({ error: "Not authenticated." });
+      return;
+    }
+    const user = await findUserBySessionToken(token);
+    if (!user) {
+      res.status(401).json({ error: "Session expired. Please sign in again." });
+      return;
+    }
+    res.json({ metrics: computeRecoveryMetrics(user), scammedVia: user.scammedVia ?? null });
+  } catch (err) {
+    logger.error({ err }, "Failed to load recovery metrics");
+    res.status(500).json({ error: "Failed to load recovery metrics." });
+  }
+});
+
+// Post-social-signup intake: collect the same details the signup form asks
+// for (Assets in total, scammed via). Only fills fields that are still
+// undocumented — it never overwrites an existing reported loss.
+router.post("/intake", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const token = extractBearerToken(req);
+    if (!token) {
+      res.status(401).json({ error: "Not authenticated." });
+      return;
+    }
+    const user = await findUserBySessionToken(token);
+    if (!user) {
+      res.status(401).json({ error: "Session expired. Please sign in again." });
+      return;
+    }
+
+    const { assetsTotalUsd, scammedVia } = req.body as {
+      assetsTotalUsd?: unknown;
+      scammedVia?: unknown;
+    };
+
+    let requestedUsd: number | null = null;
+    if (assetsTotalUsd !== undefined && assetsTotalUsd !== null && assetsTotalUsd !== "") {
+      const n = typeof assetsTotalUsd === "number"
+        ? assetsTotalUsd
+        : typeof assetsTotalUsd === "string"
+          ? Number(assetsTotalUsd)
+          : NaN;
+      if (!Number.isFinite(n) || n < 0) {
+        res.status(400).json({ error: "Assets total must be a non-negative number." });
+        return;
+      }
+      if (n > MAX_INITIAL_BALANCE_USD) {
+        res.status(400).json({
+          error: `Assets total cannot exceed $${MAX_INITIAL_BALANCE_USD.toLocaleString("en-US")}.`,
+        });
+        return;
+      }
+      requestedUsd = n;
+    }
+
+    const scammedViaClean =
+      typeof scammedVia === "string" && scammedVia.trim().length > 0
+        ? scammedVia.trim().slice(0, 120)
+        : null;
+
+    // Both details are required for the case to count as documented — a
+    // partial submission must not dismiss the intake popup for good.
+    if ((user.reportedLossUsd === null && requestedUsd === null) || (!user.scammedVia && !scammedViaClean)) {
+      res.status(400).json({ error: "Please provide your assets total and how you were scammed." });
+      return;
+    }
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (user.reportedLossUsd === null && requestedUsd !== null) {
+      updates.reportedLossUsd = requestedUsd;
+      // Mirror the signup flow: the documented assets total also becomes the
+      // user's available portfolio balance (social signups otherwise keep the
+      // schema default).
+      const BTC_PRICE = 27000;
+      updates.balanceBtc = requestedUsd / BTC_PRICE;
+    }
+    if (!user.scammedVia && scammedViaClean) {
+      updates.scammedVia = scammedViaClean;
+    }
+
+    const [updated] = await db
+      .update(users)
+      .set(updates)
+      .where(eq(users.id, user.id))
+      .returning();
+
+    logger.info(
+      { userId: user.id, documentedLoss: updated.reportedLossUsd },
+      "User completed post-signup intake",
+    );
+    res.json({
+      ok: true,
+      metrics: computeRecoveryMetrics(updated),
+      needsIntake: updated.reportedLossUsd === null || !updated.scammedVia,
+    });
+  } catch (err) {
+    logger.error({ err }, "Failed to save intake details");
+    res.status(500).json({ error: "Failed to save your details." });
   }
 });
 

@@ -14,6 +14,8 @@ interface User {
   avatar?: string;
   /** True when the server has confirmed the user's admin_clients status is approved/active. */
   portalAccess?: boolean;
+  /** True when the user hasn't documented their loss details yet (e.g. Google signup). */
+  needsIntake?: boolean;
 }
 
 interface StoredSession {
@@ -35,6 +37,10 @@ interface AuthContextType {
   resetPasswordWithToken: (token: string, newPassword: string) => Promise<void>;
   accountExists: (email: string) => Promise<boolean>;
   logout: () => Promise<void>;
+  /** True when the signed-in user still needs to document their loss details. */
+  needsIntake: boolean;
+  /** Save post-signup intake details (assets total + scammed via) and clear the flag. */
+  completeIntake: (assetsTotalUsd: number | undefined, scammedVia: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -43,7 +49,12 @@ const SESSION_KEY = "cryptovault.session";
 const LEGACY_ACCOUNTS_KEY = "cryptovault.accounts";
 
 function toUser(apiUser: AuthUser): User {
-  return { email: apiUser.email, name: apiUser.name, portalAccess: apiUser.portalAccess ?? false };
+  return {
+    email: apiUser.email,
+    name: apiUser.name,
+    portalAccess: apiUser.portalAccess ?? false,
+    needsIntake: apiUser.needsIntake ?? false,
+  };
 }
 
 function loadStoredSession(): StoredSession | null {
@@ -295,6 +306,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     recordSuccess(result.user.email);
   };
 
+  const completeIntake = async (assetsTotalUsd: number | undefined, scammedVia: string) => {
+    const token = tokenRef.current;
+    if (!token) {
+      throw new Error("You must be signed in to save your details.");
+    }
+    const result = await authApi.submitIntake(token, { assetsTotalUsd, scammedVia });
+    if (session) {
+      updateSession({
+        token,
+        user: { ...session.user, needsIntake: result.needsIntake },
+      });
+    }
+  };
+
   const logout = async () => {
     const token = tokenRef.current;
     updateSession(null);
@@ -322,6 +347,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         resetPasswordWithToken,
         accountExists,
         logout,
+        needsIntake: session?.user?.needsIntake === true,
+        completeIntake,
       }}
     >
       {children}

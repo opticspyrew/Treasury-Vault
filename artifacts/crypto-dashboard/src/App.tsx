@@ -30,15 +30,21 @@ import RefundsKnowledgeBase from "@/refunds/pages/knowledge-base";
 import RefundsSignIn from "@/refunds/pages/sign-in";
 import RefundsSignUp from "@/refunds/pages/sign-up";
 import RefundsPortal from "@/refunds/pages/portal";
+import IntakeModal from "@/components/intake-modal";
 
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, needsIntake } = useAuth();
   if (!isAuthenticated) {
     return <Redirect to="/sign-in" />;
   }
-  return <Component />;
+  return (
+    <>
+      <Component />
+      {needsIntake && <IntakeModal />}
+    </>
+  );
 }
 
 function RefundsPendingScreen() {
@@ -98,14 +104,24 @@ function RefundsPendingScreen() {
 }
 
 function RefundsProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { isAuthenticated, portalAccess } = useAuth();
+  const { isAuthenticated, portalAccess, needsIntake } = useAuth();
   if (!isAuthenticated) {
     return <Redirect to="/refunds/sign-in" />;
   }
   if (!portalAccess) {
-    return <RefundsPendingScreen />;
+    return (
+      <>
+        <RefundsPendingScreen />
+        {needsIntake && <IntakeModal />}
+      </>
+    );
   }
-  return <Component />;
+  return (
+    <>
+      <Component />
+      {needsIntake && <IntakeModal />}
+    </>
+  );
 }
 
 function Router() {
