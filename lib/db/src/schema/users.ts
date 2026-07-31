@@ -11,6 +11,8 @@ export interface NotificationPreferences {
   kycDecisions: boolean;
   /** New sign-in / new device alert emails. */
   newSignIn: boolean;
+  /** Recovery-credited-to-vault good-news emails. */
+  recoveryCredits?: boolean;
 }
 
 export const users = pgTable("users", {

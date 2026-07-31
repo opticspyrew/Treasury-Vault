@@ -433,6 +433,83 @@ export function newSignInEmail(params: {
   return { subject, html };
 }
 
+export function recoveryCreditedEmail(params: {
+  name: string;
+  email: string;
+  amountUsd: number;
+  totalRecoveredUsd: number;
+  reportedLossUsd: number;
+  creditedAt: Date;
+  portalUrl: string | null;
+  supportEmail: string;
+}): { subject: string; html: string } {
+  const {
+    name,
+    email,
+    amountUsd,
+    totalRecoveredUsd,
+    reportedLossUsd,
+    creditedAt,
+    portalUrl,
+    supportEmail,
+  } = params;
+  const fmtUsd = (v: number) =>
+    v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  const subject = `${fmtUsd(amountUsd)} was recovered to your vault`;
+  const safeName = escapeHtml(name);
+  const safeEmail = escapeHtml(email);
+  const safeTime = escapeHtml(creditedAt.toUTCString());
+  const safeSupport = escapeHtml(supportEmail);
+  const pct = reportedLossUsd > 0
+    ? Math.min(100, Math.round((totalRecoveredUsd / reportedLossUsd) * 100))
+    : 0;
+  const ctaButton = portalUrl
+    ? `<p style="text-align: center; margin: 24px 0;">
+         <a href="${escapeHtml(portalUrl)}" style="display: inline-block; background: #15803d; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 14px;">
+           View your recovery timeline
+         </a>
+       </p>`
+    : "";
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb; padding: 24px; border-radius: 8px;">
+      <div style="background: #15803d; padding: 20px 24px; border-radius: 8px 8px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 20px;">Recovery credited to your vault</h1>
+        <p style="color: #bbf7d0; margin: 4px 0 0; font-size: 13px;">Good news from your recovery team</p>
+      </div>
+      <div style="background: white; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
+        <p style="font-size: 14px; color: #111827; margin: 0 0 16px;">Hi ${safeName || "there"},</p>
+        <p style="font-size: 14px; color: #374151; margin: 0 0 16px;">
+          Our recovery team just credited <strong>${escapeHtml(fmtUsd(amountUsd))}</strong> to the vault on your
+          Treasury Vault account (<strong>${safeEmail}</strong>).
+        </p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr>
+            <td style="padding: 8px 0; color: #6b7280; font-size: 13px; width: 180px;">Credited</td>
+            <td style="padding: 8px 0; color: #15803d; font-size: 13px; font-weight: 700;">${escapeHtml(fmtUsd(amountUsd))}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #6b7280; font-size: 13px;">Total recovered so far</td>
+            <td style="padding: 8px 0; color: #111827; font-size: 13px; font-weight: 600;">${escapeHtml(fmtUsd(totalRecoveredUsd))} (${pct}% of your reported loss)</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #6b7280; font-size: 13px;">When</td>
+            <td style="padding: 8px 0; color: #111827; font-size: 13px;">${safeTime}</td>
+          </tr>
+        </table>
+        ${ctaButton}
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+        <p style="font-size: 12px; color: #6b7280; margin: 0;">
+          Questions? Contact us at
+          <a href="mailto:${safeSupport}" style="color: #15803d; font-weight: 600;">${safeSupport}</a>.
+          This is an automated notification from Treasury Vault. You can turn these emails off in your
+          notification settings.
+        </p>
+      </div>
+    </div>
+  `;
+  return { subject, html };
+}
+
 export function kycApprovedEmail(params: {
   name: string;
   email: string;

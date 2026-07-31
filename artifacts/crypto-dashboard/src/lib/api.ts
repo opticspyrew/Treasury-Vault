@@ -378,6 +378,7 @@ export const authApi = {
 export interface NotificationPreferences {
   kycDecisions: boolean;
   newSignIn: boolean;
+  recoveryCredits: boolean;
 }
 
 export interface NotificationPreferencesResponse {

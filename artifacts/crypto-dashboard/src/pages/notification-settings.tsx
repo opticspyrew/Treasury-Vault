@@ -25,6 +25,12 @@ const CATEGORIES: Category[] = [
     description:
       "Get an email when your account is accessed from a new device or location.",
   },
+  {
+    key: "recoveryCredits",
+    title: "Recovery credits",
+    description:
+      "Get an email the moment a recovery is credited to your vault.",
+  },
 ];
 
 function Toggle({
