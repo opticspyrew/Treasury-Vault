@@ -88,14 +88,37 @@ up test cases afterward. Deploy is user-initiated (Publish button) — the recei
   exists for retention but is NOT auto-scheduled — wire a cron if growth matters.
 
 ## Partner "production URL" verification (2026-07)
-Netspy's claimed production tRPC base `https://netspyworld.com/api/trpc` is NOT a
-deployed API: Cloudflare-fronted, returns HTTP 403 + HTML `<title>Manus Space</title>`
-on every path (`/`, `/api/trpc`, `/api/trpc/*`) — a Manus sandbox placeholder, not
-tRPC. Even `system.health` fails there.
+Netspy's earlier claimed base `https://netspyworld.com/api/trpc` was NOT deployed
+(Cloudflare 403 + "Manus Space" HTML placeholder). On 2026-07-31 they delivered
+`https://netspyworld.manus.space/api/trpc` — VERIFIED live real tRPC: `system.health`
+200 `{"ok":true}` (input timestamp must be a NUMBER epoch, not the PDF's ISO string),
+all three `cases.*` procedures exist, and `<origin>/api/health` REST sibling works.
+Wire format is tRPC+superjson: queries `?input={"json":<input>}`, mutation bodies
+`{"json":<input>}`, success `{"result":{"data":{"json":...}}}` — plain-REST framing
+400s. SECURITY NOTE: `cases.getUnified`
+answered with NO auth headers — their reads appear public; don't assume their auth
+mirrors ours.
 **Rule:** before enabling outbound (`NETSPY_API_BASE_URL` + `MANUS_OUTBOUND_SYNC_ENABLED=1`),
 curl the URL and require a JSON tRPC response from `system.health`; a "Manus Space"
 HTML page or any non-JSON = undeployed, do NOT enable. A delivered URL is necessary
 but not sufficient — `cases.createUnified/getUnified/syncStatus` must actually respond.
+Do NOT smoke-test `cases.createUnified` against their prod — it creates real rows;
+verify mutations only via their staging or a partner-coordinated test case.
+
+## Outbound live verification (2026-07-31, dev-enabled)
+Full roundtrip verified against the live host: intake → createUnified → 200 →
+getUnified returns the case. Two more spec drifts confirmed by the live zod
+errors: `system.health` timestamp must be a NUMBER epoch, and
+`cases.createUnified.estimatedLoss` must be a STRING (PDF says number) — their
+error messages quote the zod issue verbatim, so trust those over the PDF.
+**Gotcha:** their fresh prod DB restarts unifiedCaseId at 1, which COLLIDES with
+stale `manus_case_id` links left in our dev DB from July staging tests (unique
+constraint blocks the link; case exists remotely but records "pending...failed
+to persist link"). Stale sandbox-era links were nulled; if the partner redeploys
+and resets IDs again, expect the same collision and null stale links first.
+Outbound is enabled in BOTH environments (`MANUS_OUTBOUND_SYNC_ENABLED` +
+`NETSPY_API_BASE_URL` set in dev and production, 2026-07-31); production takes
+effect only after the user republishes the tRPC wire-format client fixes.
 **Inbound payloads:** map `case.updated`/`case.synced`/`blockchain.data.updated` in
 processWebhookEvent only from concrete field specs, never a summary; until then they
 stay logged+acked (no guessing).

@@ -128,7 +128,7 @@ export async function sendUserEmail(
 
   try {
     await transporter.sendMail({
-      from: `"CryptoVault" <${process.env.SMTP_USER}>`,
+      from: `"Treasury Vault" <${process.env.SMTP_USER}>`,
       to,
       subject,
       html,
@@ -202,7 +202,7 @@ export function accountLockedUserEmail(params: {
     resetPasswordUrl,
     supportEmail,
   } = params;
-  const subject = "Your CryptoVault account is temporarily locked";
+  const subject = "Your Treasury Vault account is temporarily locked";
   const safeName = escapeHtml(name);
   const safeEmail = escapeHtml(email);
   const safeTime = escapeHtml(lockedAt.toUTCString());
@@ -226,7 +226,7 @@ export function accountLockedUserEmail(params: {
       <div style="background: white; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
         <p style="font-size: 14px; color: #111827; margin: 0 0 16px;">Hi ${safeName || "there"},</p>
         <p style="font-size: 14px; color: #374151; margin: 0 0 16px;">
-          We temporarily locked your CryptoVault account (<strong>${safeEmail}</strong>) after too many
+          We temporarily locked your Treasury Vault account (<strong>${safeEmail}</strong>) after too many
           failed sign-in attempts. This is an automatic safety measure to protect your account.
         </p>
         <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
@@ -254,7 +254,7 @@ export function accountLockedUserEmail(params: {
         ${ctaButton}
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
         <p style="font-size: 12px; color: #6b7280; margin: 0;">
-          This is an automated security notification from CryptoVault. You'll only get one email per
+          This is an automated security notification from Treasury Vault. You'll only get one email per
           lockout window.
         </p>
       </div>
@@ -269,7 +269,7 @@ export function passwordResetEmail(params: {
   expiresInMinutes: number;
 }): { subject: string; html: string } {
   const { name, resetUrl, expiresInMinutes } = params;
-  const subject = "Reset your CryptoVault password";
+  const subject = "Reset your Treasury Vault password";
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb; padding: 24px; border-radius: 8px;">
       <div style="background: #1e3a5f; padding: 20px 24px; border-radius: 8px 8px 0 0;">
@@ -278,7 +278,7 @@ export function passwordResetEmail(params: {
       <div style="background: white; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
         <p style="font-size: 14px; color: #111827; margin: 0 0 16px;">Hi ${name || "there"},</p>
         <p style="font-size: 14px; color: #374151; margin: 0 0 16px;">
-          We received a request to reset the password for your CryptoVault account. Click the
+          We received a request to reset the password for your Treasury Vault account. Click the
           button below to set a new password. This link will expire in ${expiresInMinutes} minutes
           and can only be used once.
         </p>
@@ -312,7 +312,7 @@ export function passwordChangedEmail(params: {
   supportEmail: string;
 }): { subject: string; html: string } {
   const { name, email, changedAt, method, supportEmail } = params;
-  const subject = "Your CryptoVault password was changed";
+  const subject = "Your Treasury Vault password was changed";
   const methodLabel =
     method === "reset"
       ? "using the email-based password reset flow"
@@ -326,7 +326,7 @@ export function passwordChangedEmail(params: {
       <div style="background: white; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
         <p style="font-size: 14px; color: #111827; margin: 0 0 16px;">Hi ${name || "there"},</p>
         <p style="font-size: 14px; color: #374151; margin: 0 0 16px;">
-          The password for your CryptoVault account (<strong>${email}</strong>) was just changed ${methodLabel}.
+          The password for your Treasury Vault account (<strong>${email}</strong>) was just changed ${methodLabel}.
         </p>
         <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
           <tr>
@@ -348,7 +348,7 @@ export function passwordChangedEmail(params: {
         </div>
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
         <p style="font-size: 12px; color: #6b7280; margin: 0;">
-          This is an automated security notification from CryptoVault. You're receiving it because the password
+          This is an automated security notification from Treasury Vault. You're receiving it because the password
           on your account was changed.
         </p>
       </div>
@@ -379,7 +379,7 @@ export function newSignInEmail(params: {
     changePasswordUrl,
     supportEmail,
   } = params;
-  const subject = "New sign-in to your CryptoVault account";
+  const subject = "New sign-in to your Treasury Vault account";
   const timestamp = signedInAt.toUTCString();
   // We always show an "IP / Region" row so the user can recognize the sign-in.
   // Either field falls back to "Unavailable" when we don't have it (e.g. no
@@ -401,7 +401,7 @@ export function newSignInEmail(params: {
       <div style="background: white; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
         <p style="font-size: 14px; color: #111827; margin: 0 0 16px;">Hi ${name || "there"},</p>
         <p style="font-size: 14px; color: #374151; margin: 0 0 16px;">
-          We detected a sign-in to your CryptoVault account (<strong>${email}</strong>) from a device or
+          We detected a sign-in to your Treasury Vault account (<strong>${email}</strong>) from a device or
           location we haven't seen before.
         </p>
         <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
@@ -424,7 +424,7 @@ export function newSignInEmail(params: {
         </div>
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
         <p style="font-size: 12px; color: #6b7280; margin: 0;">
-          This is an automated security notification from CryptoVault. You're receiving it because a new
+          This is an automated security notification from Treasury Vault. You're receiving it because a new
           device just signed in to your account.
         </p>
       </div>
@@ -441,7 +441,7 @@ export function kycApprovedEmail(params: {
   supportEmail: string;
 }): { subject: string; html: string } {
   const { name, email, decidedAt, dashboardUrl, supportEmail } = params;
-  const subject = "Your CryptoVault identity verification was approved";
+  const subject = "Your Treasury Vault identity verification was approved";
   const timestamp = decidedAt.toUTCString();
   const safeName = escapeHtml(name);
   const safeEmail = escapeHtml(email);
@@ -463,7 +463,7 @@ export function kycApprovedEmail(params: {
         <p style="font-size: 14px; color: #111827; margin: 0 0 16px;">Hi ${safeName || "there"},</p>
         <p style="font-size: 14px; color: #374151; margin: 0 0 16px;">
           Good news — we've reviewed and <strong>approved</strong> the identity verification for
-          your CryptoVault account (<strong>${safeEmail}</strong>). You can now use
+          your Treasury Vault account (<strong>${safeEmail}</strong>). You can now use
           <strong>Send</strong> and <strong>Withdraw</strong> from your dashboard.
         </p>
         <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
@@ -481,7 +481,7 @@ export function kycApprovedEmail(params: {
         <p style="font-size: 12px; color: #6b7280; margin: 0;">
           Questions? Contact us at
           <a href="mailto:${safeSupport}" style="color: #15803d; font-weight: 600;">${safeSupport}</a>.
-          This is an automated notification from CryptoVault.
+          This is an automated notification from Treasury Vault.
         </p>
       </div>
     </div>
@@ -498,7 +498,7 @@ export function kycRejectedEmail(params: {
   supportEmail: string;
 }): { subject: string; html: string } {
   const { name, email, decidedAt, reviewerNotes, resubmitUrl, supportEmail } = params;
-  const subject = "Action needed: your CryptoVault identity verification was not approved";
+  const subject = "Action needed: your Treasury Vault identity verification was not approved";
   const timestamp = decidedAt.toUTCString();
   const safeName = escapeHtml(name);
   const safeEmail = escapeHtml(email);
@@ -520,7 +520,7 @@ export function kycRejectedEmail(params: {
       <div style="background: white; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
         <p style="font-size: 14px; color: #111827; margin: 0 0 16px;">Hi ${safeName || "there"},</p>
         <p style="font-size: 14px; color: #374151; margin: 0 0 16px;">
-          We've reviewed the identity verification for your CryptoVault account
+          We've reviewed the identity verification for your Treasury Vault account
           (<strong>${safeEmail}</strong>) and weren't able to approve it. Send and
           Withdraw remain disabled until a new submission is approved.
         </p>
@@ -543,7 +543,7 @@ export function kycRejectedEmail(params: {
         <p style="font-size: 12px; color: #6b7280; margin: 0;">
           Need help? Contact us at
           <a href="mailto:${safeSupport}" style="color: #b91c1c; font-weight: 600;">${safeSupport}</a>.
-          This is an automated notification from CryptoVault.
+          This is an automated notification from Treasury Vault.
         </p>
       </div>
     </div>
@@ -564,8 +564,8 @@ export function paymentConfirmationDecisionEmail(params: {
   const { name, email, decision, decidedAt, amount, currency, invoiceUrl, supportEmail } = params;
   const approved = decision === "approved";
   const subject = approved
-    ? "Your CryptoVault payment confirmation was approved"
-    : "Action needed: your CryptoVault payment confirmation was not approved";
+    ? "Your Treasury Vault payment confirmation was approved"
+    : "Action needed: your Treasury Vault payment confirmation was not approved";
   const headerColor = approved ? "#15803d" : "#b91c1c";
   const buttonLabel = approved ? "Continue on your invoice" : "Retry payment confirmation";
   const decisionLabel = approved ? "Approved" : "Not approved";
@@ -580,8 +580,8 @@ export function paymentConfirmationDecisionEmail(params: {
     ? `<tr><td style="padding: 8px 0; color: #6b7280; font-size: 13px;">Amount</td><td style="padding: 8px 0; color: #111827; font-size: 13px;">${escapeHtml(amountStr)}</td></tr>`
     : "";
   const intro = approved
-    ? `Good news — we've reviewed and <strong>approved</strong> the payment confirmation for your CryptoVault account (<strong>${safeEmail}</strong>). You can continue with your withdrawal from the invoice page.`
-    : `We've reviewed the payment confirmation for your CryptoVault account (<strong>${safeEmail}</strong>) and weren't able to approve it. You can retry the confirmation from the invoice page.`;
+    ? `Good news — we've reviewed and <strong>approved</strong> the payment confirmation for your Treasury Vault account (<strong>${safeEmail}</strong>). You can continue with your withdrawal from the invoice page.`
+    : `We've reviewed the payment confirmation for your Treasury Vault account (<strong>${safeEmail}</strong>) and weren't able to approve it. You can retry the confirmation from the invoice page.`;
   const ctaButton = invoiceUrl
     ? `<p style="text-align: center; margin: 24px 0;">
          <a href="${escapeHtml(invoiceUrl)}" style="display: inline-block; background: ${headerColor}; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 14px;">
@@ -613,7 +613,7 @@ export function paymentConfirmationDecisionEmail(params: {
         <p style="font-size: 12px; color: #6b7280; margin: 0;">
           Questions? Contact us at
           <a href="mailto:${safeSupport}" style="color: ${headerColor}; font-weight: 600;">${safeSupport}</a>.
-          This is an automated notification from CryptoVault.
+          This is an automated notification from Treasury Vault.
         </p>
       </div>
     </div>

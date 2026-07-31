@@ -105,7 +105,7 @@ router.post("/register", publicSubmissionLimiter, async (req: Request, res: Resp
     await db.insert(adminActivityLog).values({
       eventType: "client_registered",
       clientId: client.id,
-      description: `New client registered via CryptoVault: ${client.name} (${client.email})`,
+      description: `New client registered via Treasury Vault: ${client.name} (${client.email})`,
       metadata: { name: client.name, email: client.email },
     });
 

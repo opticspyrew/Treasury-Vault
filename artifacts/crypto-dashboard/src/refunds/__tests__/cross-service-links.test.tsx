@@ -1,5 +1,5 @@
 /**
- * Guards the cross-service navigation from Refunds.site into the CryptoVault
+ * Guards the cross-service navigation from Refunds.site into the Treasury Vault
  * dashboard. Several surfaces expose a "Crypto Dashboard" link that must route
  * to /dashboard; a future refactor could silently change the target and break
  * the hand-off between the two products. These tests render each surface and

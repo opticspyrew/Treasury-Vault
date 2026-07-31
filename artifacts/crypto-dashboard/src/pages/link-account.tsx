@@ -512,7 +512,7 @@ export default function LinkAccount() {
               <div className="relative z-10 flex flex-col justify-between h-full">
                 <div className="flex items-center justify-between">
                   <div className="w-8 h-6 bg-amber-400 rounded-sm opacity-90" />
-                  <span className="text-white text-xs font-semibold opacity-60">CryptoVault</span>
+                  <span className="text-white text-xs font-semibold opacity-60">Treasury Vault</span>
                 </div>
                 <div>
                   <p className="text-white font-mono text-base tracking-widest">
