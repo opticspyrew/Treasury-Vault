@@ -87,11 +87,8 @@ export default function ResetPassword() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-lg">C</span>
-          </div>
-          <span className="text-xl font-bold text-foreground">CryptoVault</span>
+        <div className="flex items-center mb-10">
+          <img src="/treasury-vault-logo.jpg" alt="Treasury Vault" className="h-12 w-auto rounded-xl bg-white object-contain" />
         </div>
 
         <div className="bg-card border border-card-border rounded-2xl p-8">

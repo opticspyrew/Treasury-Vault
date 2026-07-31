@@ -103,7 +103,7 @@ async function runCaseCreate(input: OutboundCaseCreate): Promise<void> {
     clientEmail: input.clientEmail,
     clientName: input.clientName,
     caseType: "both",
-    estimatedLoss: input.amount != null ? Number(input.amount) : undefined,
+    estimatedLoss: input.amount != null ? String(input.amount) : undefined,
     caseDescription: input.description,
     ...(blockchainData ? { blockchainData } : {}),
   });

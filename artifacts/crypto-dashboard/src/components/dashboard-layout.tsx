@@ -91,11 +91,12 @@ export default function DashboardLayout({ children, activeTab }: LayoutProps) {
         }`}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 p-6 border-b border-sidebar-border">
-          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
-            <span className="text-primary-foreground font-bold text-base">C</span>
-          </div>
-          <span className="text-lg font-bold text-foreground">CryptoVault</span>
+        <div className="flex items-center px-4 py-3 border-b border-sidebar-border">
+          <img
+            src="/treasury-vault-logo.jpg"
+            alt="Treasury Vault"
+            className="h-10 w-auto rounded-lg bg-white object-contain"
+          />
         </div>
 
         {/* Nav */}

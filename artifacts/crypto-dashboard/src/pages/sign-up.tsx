@@ -130,11 +130,8 @@ export default function SignUp() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="flex gap-3 mb-10 font-extrabold justify-center items-center flex-col text-[#2193ebf0] text-[16px]">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center flex-col">
-            <span className="text-primary-foreground font-bold text-lg">C</span>
-          </div>
-          <span>CHARGE-BACK NEXUX HUB</span>
+        <div className="flex items-center justify-center mb-10">
+          <img src="/treasury-vault-logo.jpg" alt="Treasury Vault" className="h-14 w-auto rounded-xl bg-white object-contain" />
         </div>
 
         <TotalAssetsBanner />
