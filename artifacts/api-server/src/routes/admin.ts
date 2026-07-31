@@ -596,6 +596,88 @@ router.post("/users/:id/record-recovery", requireAdmin, async (req: Request, res
   }
 });
 
+// Correct a user's cumulative recovered total after a mistyped recovery
+// credit. Unlike record-recovery (increment-only), this sets the recovered
+// total to an explicit corrected value — never below 0 and never above the
+// reported loss — and writes an audit entry capturing the before/after
+// values and the admin's stated reason.
+router.post("/users/:id/adjust-recovery", requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const id = Number.parseInt(String(rawId ?? ""), 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "Invalid user id" });
+      return;
+    }
+
+    const body = (req.body ?? {}) as { recoveredUsd?: unknown; reason?: unknown };
+    const newTotal = typeof body.recoveredUsd === "number" ? body.recoveredUsd : Number(body.recoveredUsd);
+    if (!Number.isFinite(newTotal) || newTotal < 0) {
+      res.status(400).json({ error: "recoveredUsd must be a non-negative number" });
+      return;
+    }
+    const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
+
+    const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    if (user.reportedLossUsd === null) {
+      res.status(400).json({ error: "This user has no documented reported loss yet." });
+      return;
+    }
+    if (newTotal > user.reportedLossUsd) {
+      res.status(400).json({
+        error: `Corrected total cannot exceed the reported loss ($${user.reportedLossUsd.toLocaleString("en-US")}).`,
+      });
+      return;
+    }
+    const previousTotal = user.recoveredUsd;
+    if (newTotal === previousTotal) {
+      res.status(400).json({ error: "Corrected total matches the current recovered total — nothing to change." });
+      return;
+    }
+
+    // Re-check both bounds inside the UPDATE so a concurrent recovery credit
+    // can't slip in between our read and this write and be silently
+    // overwritten past the reported-loss cap.
+    const [updated] = await db
+      .update(users)
+      .set({ recoveredUsd: newTotal, updatedAt: new Date() })
+      .where(sql`${users.id} = ${id} AND ${users.recoveredUsd} = ${previousTotal} AND ${users.reportedLossUsd} IS NOT NULL AND ${newTotal} <= ${users.reportedLossUsd}`)
+      .returning({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        reportedLossUsd: users.reportedLossUsd,
+        recoveredUsd: users.recoveredUsd,
+      });
+
+    if (!updated) {
+      res.status(409).json({ error: "The recovered total changed while you were editing. Please reload and try again." });
+      return;
+    }
+
+    await db.insert(adminActivityLog).values({
+      eventType: "user_recovery_adjusted",
+      description: `Admin corrected recovered total for ${updated.name} (${updated.email}) from $${previousTotal.toLocaleString("en-US")} to $${updated.recoveredUsd.toLocaleString("en-US")}${reason ? ` — reason: ${reason}` : ""}`,
+      metadata: {
+        userId: id,
+        previousRecoveredUsd: previousTotal,
+        recoveredUsd: updated.recoveredUsd,
+        reportedLossUsd: updated.reportedLossUsd,
+        reason: reason || null,
+      },
+    });
+
+    res.json({ user: updated });
+  } catch (err) {
+    logger.error({ err }, "Failed to adjust recovery");
+    res.status(500).json({ error: "Failed to adjust recovery" });
+  }
+});
+
 // Clear the per-account sign-in failure counter for a user. Used by the
 // admin "Unlock sign-in" action so that a customer who locked themselves
 // out (typo, forgotten password) can immediately retry without waiting
