@@ -22,6 +22,7 @@ import SetPassword from "@/pages/set-password";
 import ConnectedAccounts from "@/pages/connected-accounts";
 import NotificationSettings from "@/pages/notification-settings";
 import ResetPassword from "@/pages/reset-password";
+import DevScamThumbs from "@/pages/dev-scam-thumbs";
 import RefundsLanding from "@/refunds/pages/landing";
 import RefundsBrandGuide from "@/refunds/pages/brand-guide";
 import RefundsServices from "@/refunds/pages/services-pricing";
@@ -144,6 +145,7 @@ function Router() {
       <Route path="/set-password" component={() => <ProtectedRoute component={SetPassword} />} />
       <Route path="/connected-accounts" component={() => <ProtectedRoute component={ConnectedAccounts} />} />
       <Route path="/notification-settings" component={() => <ProtectedRoute component={NotificationSettings} />} />
+      {import.meta.env.DEV && <Route path="/dev/scam-thumbs" component={DevScamThumbs} />}
       <Route path="/refunds" component={RefundsLanding} />
       <Route path="/refunds/brand" component={RefundsBrandGuide} />
       <Route path="/refunds/services" component={RefundsServices} />

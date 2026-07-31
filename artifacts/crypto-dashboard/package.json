@@ -80,6 +80,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "react-qr-code": "^2.0.18"
+    "react-qr-code": "^2.0.18",
+    "simple-icons": "^16.27.1"
   }
 }
