@@ -21,19 +21,12 @@ export interface OutboundResponse<T = unknown> {
 }
 
 const MAX_ATTEMPTS = 3;
-
-// NETSPY_REQUEST_TIMEOUT_MS exists so tests can shorten the abort window
-// (mirrors NETSPY_BACKOFF_BASE_MS); unset in prod. Read live per request.
-function requestTimeoutMs(): number {
-  return Number(process.env.NETSPY_REQUEST_TIMEOUT_MS ?? 15_000);
-}
+const REQUEST_TIMEOUT_MS = 15_000;
 
 function backoff(attempt: number): Promise<void> {
   // 250ms, 500ms, 1000ms — short enough to stay within a request's patience when
   // a caller chooses to await, long enough to ride out a brief blip.
-  // NETSPY_BACKOFF_BASE_MS exists so tests can shorten waits; unset in prod.
-  const base = Number(process.env.NETSPY_BACKOFF_BASE_MS ?? 250);
-  return new Promise((resolve) => setTimeout(resolve, base * 2 ** (attempt - 1)));
+  return new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
 }
 
 function parseBody(text: string): unknown {
@@ -47,40 +40,9 @@ function parseBody(text: string): unknown {
 
 function errorFrom(data: unknown, status: number): string {
   if (data && typeof data === "object" && "error" in data) {
-    const err = (data as Record<string, unknown>).error;
-    // tRPC error envelope: {"error":{"json":{"message":...}}}
-    if (err && typeof err === "object") {
-      const json = (err as Record<string, unknown>).json;
-      if (json && typeof json === "object" && "message" in (json as object)) {
-        return String((json as Record<string, unknown>).message);
-      }
-    }
-    return String(err);
+    return String((data as Record<string, unknown>).error);
   }
   return `HTTP ${status}`;
-}
-
-// The live Netspy server (verified 2026-07-31 at netspyworld.manus.space) is a
-// real tRPC server with a superjson-style transformer: query inputs travel as
-// `?input={"json":<input>}` and mutation bodies as `{"json":<input>}`. Success
-// payloads arrive as {"result":{"data":{"json":<output>}}}. The handoff PDF's
-// plain-REST framing does not work against it (400 invalid_type).
-function wrapTrpcInput(input: unknown): string {
-  return JSON.stringify({ json: input });
-}
-
-function unwrapTrpcResult(data: unknown): unknown {
-  if (data && typeof data === "object" && "result" in data) {
-    const result = (data as Record<string, unknown>).result;
-    if (result && typeof result === "object" && "data" in (result as object)) {
-      const inner = (result as Record<string, unknown>).data;
-      if (inner && typeof inner === "object" && "json" in (inner as object)) {
-        return (inner as Record<string, unknown>).json;
-      }
-      return inner;
-    }
-  }
-  return data;
 }
 
 // Derive the health URL: health lives at <origin>/api/health, a sibling of the
@@ -133,7 +95,7 @@ async function request<T = unknown>(
   let lastError = "request failed";
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), requestTimeoutMs());
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
       const resp = await fetch(url, {
         method,
@@ -143,7 +105,7 @@ async function request<T = unknown>(
       });
       const text = await resp.text();
       const data = parseBody(text);
-      if (resp.ok) return { ok: true, status: resp.status, data: unwrapTrpcResult(data) as T };
+      if (resp.ok) return { ok: true, status: resp.status, data: data as T };
       // Retry server-side and rate-limit errors; surface client errors verbatim.
       if (resp.status >= 500 || resp.status === 429) {
         lastError = `HTTP ${resp.status}`;
@@ -171,10 +133,7 @@ export interface CreateUnifiedCaseInput {
   clientEmail: string;
   clientName: string;
   caseType?: string;
-  // The live server's zod schema requires a STRING here (verified 2026-07-31:
-  // a number is rejected with invalid_type "expected string, received number"),
-  // despite the handoff PDF typing it as a number.
-  estimatedLoss?: string;
+  estimatedLoss?: number;
   caseDescription?: string;
   evidenceFileUrl?: string;
   blockchainData?: {
@@ -200,30 +159,15 @@ export function health(): Promise<OutboundResponse> {
 export function createUnifiedCase(
   input: CreateUnifiedCaseInput,
 ): Promise<OutboundResponse<{ unifiedCaseId?: number; netsyyCaseId?: number; status?: string }>> {
-  return request("POST", "cases.createUnified", { body: { json: input } });
+  return request("POST", "cases.createUnified", { body: input });
 }
 
 export function getUnifiedCase(unifiedCaseId: number | string): Promise<OutboundResponse> {
-  // Reject empty/blank strings explicitly: Number("") is 0, which would
-  // otherwise be sent to the partner as {"unifiedCaseId":0}.
-  const id =
-    typeof unifiedCaseId === "string" && unifiedCaseId.trim() === ""
-      ? NaN
-      : Number(unifiedCaseId);
-  if (!Number.isFinite(id)) {
-    return Promise.resolve({
-      ok: false,
-      status: 0,
-      error: `invalid unifiedCaseId: ${String(unifiedCaseId)}`,
-    });
-  }
-  return request("GET", "cases.getUnified", {
-    query: { input: wrapTrpcInput({ unifiedCaseId: id }) },
-  });
+  return request("GET", "cases.getUnified", { query: { unifiedCaseId: String(unifiedCaseId) } });
 }
 
 export function syncCaseStatus(input: SyncStatusInput): Promise<OutboundResponse> {
-  return request("POST", "cases.syncStatus", { body: { json: input } });
+  return request("POST", "cases.syncStatus", { body: input });
 }
 
-export { healthUrl, wrapTrpcInput, unwrapTrpcResult };
+export { healthUrl };

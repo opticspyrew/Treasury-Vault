@@ -57,7 +57,7 @@ export default function TransactionReceiptModal({ tx, onClose }: Props) {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Treasury Vault Receipt – ${ref}</title>
+        <title>CryptoVault Receipt – ${ref}</title>
         <style>
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body { font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #111; padding: 32px; }
@@ -125,7 +125,7 @@ export default function TransactionReceiptModal({ tx, onClose }: Props) {
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#f59e0b", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 18, color: "#000" }}>₿</div>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: ".02em" }}>Treasury Vault</div>
+                    <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: ".02em" }}>CryptoVault</div>
                     <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>Transaction Receipt</div>
                   </div>
                 </div>
@@ -195,7 +195,7 @@ export default function TransactionReceiptModal({ tx, onClose }: Props) {
                 <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#10b981", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <svg width="12" height="12" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" /></svg>
                 </div>
-                <span style={{ fontSize: 12, color: "#94a3b8" }}>Cryptographically signed by Treasury Vault</span>
+                <span style={{ fontSize: 12, color: "#94a3b8" }}>Cryptographically signed by CryptoVault</span>
               </div>
               <div style={{ fontFamily: "monospace", fontSize: 11, color: "#475569", wordBreak: "break-all", background: "#111827", padding: "10px 14px", borderRadius: 8, border: "1px solid #1e293b" }}>
                 {txHash}
@@ -205,8 +205,8 @@ export default function TransactionReceiptModal({ tx, onClose }: Props) {
             {/* Footer */}
             <div style={{ textAlign: "center", padding: "16px 28px", background: "#070a10" }}>
               <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.7 }}>
-                <strong style={{ color: "#64748b" }}>Treasury Vault</strong> · Secure Digital Asset Management<br />
-                support@treasuryvault.io · treasuryvault.app<br />
+                <strong style={{ color: "#64748b" }}>CryptoVault</strong> · Secure Digital Asset Management<br />
+                support@cryptovault.io · cryptovault.app<br />
                 <span style={{ fontSize: 10 }}>This document is an official receipt and proof of transaction. Keep it for your records.</span>
               </div>
             </div>

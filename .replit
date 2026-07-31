@@ -176,12 +176,10 @@ channel = "stable-25_05"
 [userenv.development]
 MANUS_INBOUND_SYNC_ENABLED = "1"
 MANUS_OUTBOUND_SYNC_ENABLED = "1"
-NETSPY_API_BASE_URL = "https://netspyworld.manus.space/api/trpc"
+NETSPY_API_BASE_URL = "https://3000-i879oz0togqo0hkembtrz-f3f3d4d2.us2.manus.computer/api/trpc"
 
 [userenv.production]
 MANUS_INBOUND_SYNC_ENABLED = "1"
-MANUS_OUTBOUND_SYNC_ENABLED = "1"
-NETSPY_API_BASE_URL = "https://netspyworld.manus.space/api/trpc"
 
 [objectStorage]
 defaultBucketID = "replit-objstore-c057b35a-4507-4039-99d9-08e090d0a00a"

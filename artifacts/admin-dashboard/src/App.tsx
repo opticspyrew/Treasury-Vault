@@ -613,7 +613,7 @@ function UsersPage() {
           )}
         </div>
         <p className="text-sm text-muted-foreground">
-          All Treasury Vault accounts. Password material is never sent to the browser.
+          All CryptoVault accounts. Password material is never sent to the browser.
           {lockedCount > 0 && " Locked accounts are listed first."}
         </p>
       </div>

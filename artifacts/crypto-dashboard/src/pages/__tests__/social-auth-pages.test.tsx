@@ -216,7 +216,7 @@ describe("ConnectedAccounts — ?status= query plumbing and provider rendering",
 
     render(<ConnectedAccounts />);
     const banner = await screen.findByTestId("connected-accounts-status");
-    expect(banner.textContent).toMatch(/different Treasury Vault user/i);
+    expect(banner.textContent).toMatch(/different CryptoVault user/i);
   });
 
   it("renders an enabled Connect button when Google is configured", async () => {

@@ -129,7 +129,7 @@ export default function CryptoPaymentPanel({ open, className = "", onSelectionCh
             {networks.length === 0 ? (
               <div className="text-center py-6">
                 <p className="text-sm text-slate-400">No wallet configured for {selectedCoin} yet.</p>
-                <p className="text-xs text-slate-500 mt-1">Please contact support at billing@treasuryvault.io</p>
+                <p className="text-xs text-slate-500 mt-1">Please contact support at billing@cryptovault.io</p>
               </div>
             ) : (
               <>
@@ -166,7 +166,7 @@ export default function CryptoPaymentPanel({ open, className = "", onSelectionCh
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                     <p className="text-sm font-semibold text-white mb-1">Wallet address not yet configured</p>
-                    <p className="text-xs text-slate-400 leading-relaxed">Please contact support at <span className="text-emerald-400">billing@treasuryvault.io</span> to receive payment instructions for {selectedCoin} via {selectedNetwork.network}.</p>
+                    <p className="text-xs text-slate-400 leading-relaxed">Please contact support at <span className="text-emerald-400">billing@cryptovault.io</span> to receive payment instructions for {selectedCoin} via {selectedNetwork.network}.</p>
                   </div>
                 ) : (
                   <>
