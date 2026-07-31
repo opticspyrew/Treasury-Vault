@@ -79,6 +79,8 @@ beforeEach(() => {
   process.env.NETSPY_API_KEY = API_KEY;
   process.env.NETSPY_API_SECRET = API_SECRET;
   process.env.NETSPY_API_BASE_URL = BASE_URL;
+  // Shrink exponential backoff (250/500ms → 1/2ms) so retry tests stay fast.
+  process.env.NETSPY_BACKOFF_BASE_MS = "1";
 });
 
 // --- Mutations: exact body serialization -----------------------------------
@@ -232,6 +234,87 @@ test("health GETs <origin>/api/health and passes the REST body through untouched
 
   assert.equal(healthUrl(BASE_URL), "https://netspy.example.com/api/health");
   assert.equal(healthUrl("not a url/api/trpc"), "not a url/api/health");
+});
+
+// --- Retry behavior: transient errors retried, deterministic ones not --------
+//
+// The client must ride out brief partner outages (5xx/429/network blips) with
+// at most MAX_ATTEMPTS(3) tries, and must NEVER retry deterministic 4xx —
+// re-sending those would hammer the partner's production API for no benefit.
+
+test("5xx is retried up to 3 attempts, then surfaced", async () => {
+  mockFetch(() => jsonResponse(503, { error: "unavailable" }));
+  const res = await getUnifiedCase(1);
+  assert.equal(calls.length, 3);
+  assert.deepEqual(res, { ok: false, status: 503, error: "HTTP 503" });
+});
+
+test("429 is retried up to 3 attempts, then surfaced", async () => {
+  mockFetch(() => new Response("slow down", { status: 429 }));
+  const res = await syncCaseStatus({
+    unifiedCaseId: 1,
+    investigationStatus: "x",
+    recoveryStatus: "y",
+  });
+  assert.equal(calls.length, 3);
+  assert.deepEqual(res, { ok: false, status: 429, error: "HTTP 429" });
+});
+
+test("network errors are retried up to 3 attempts, then surfaced as status 0", async () => {
+  mockFetch(() => {
+    throw new TypeError("fetch failed: ECONNREFUSED");
+  });
+  const res = await getUnifiedCase(1);
+  assert.equal(calls.length, 3);
+  assert.equal(res.ok, false);
+  assert.equal(res.status, 0);
+  assert.match(res.error, /ECONNREFUSED/);
+});
+
+test("success after a transient 500 returns ok (one retry, then stop)", async () => {
+  const output = { unifiedCaseId: 5 };
+  mockFetch(jsonResponse(500, {}), TRPC_OK(output));
+  const res = await getUnifiedCase(5);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(res, { ok: true, status: 200, data: output });
+});
+
+test("success after a network error returns ok", async () => {
+  mockFetch(
+    () => {
+      throw new Error("socket hang up");
+    },
+    TRPC_OK({ ok: true }),
+  );
+  const res = await syncCaseStatus({
+    unifiedCaseId: 2,
+    investigationStatus: "x",
+    recoveryStatus: "y",
+  });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(res, { ok: true, status: 200, data: { ok: true } });
+});
+
+test("4xx is never retried (400, 401, 404)", async () => {
+  for (const status of [400, 401, 404]) {
+    mockFetch(jsonResponse(status, { error: "nope" }));
+    const res = await getUnifiedCase(1);
+    assert.equal(calls.length, 1, `status ${status} must not be retried`);
+    assert.equal(res.ok, false);
+    assert.equal(res.status, status);
+  }
+});
+
+test("each retry re-sends the identical signed body", async () => {
+  mockFetch(jsonResponse(500, {}), jsonResponse(500, {}), TRPC_OK({}));
+  const input = { clientEmail: "a@b.co", clientName: "A B" };
+  await createUnifiedCase(input);
+  assert.equal(calls.length, 3);
+  const wrapped = JSON.stringify({ json: input });
+  for (const call of calls) {
+    assert.equal(call.body, wrapped);
+    assert.equal(call.headers["X-API-Signature"], hmac(wrapped));
+  }
 });
 
 // --- Gating -------------------------------------------------------------------

@@ -26,7 +26,9 @@ const REQUEST_TIMEOUT_MS = 15_000;
 function backoff(attempt: number): Promise<void> {
   // 250ms, 500ms, 1000ms — short enough to stay within a request's patience when
   // a caller chooses to await, long enough to ride out a brief blip.
-  return new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
+  // NETSPY_BACKOFF_BASE_MS exists so tests can shorten waits; unset in prod.
+  const base = Number(process.env.NETSPY_BACKOFF_BASE_MS ?? 250);
+  return new Promise((resolve) => setTimeout(resolve, base * 2 ** (attempt - 1)));
 }
 
 function parseBody(text: string): unknown {
