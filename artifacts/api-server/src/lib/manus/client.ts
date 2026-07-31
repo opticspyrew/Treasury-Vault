@@ -21,7 +21,12 @@ export interface OutboundResponse<T = unknown> {
 }
 
 const MAX_ATTEMPTS = 3;
-const REQUEST_TIMEOUT_MS = 15_000;
+
+// NETSPY_REQUEST_TIMEOUT_MS exists so tests can shorten the abort window
+// (mirrors NETSPY_BACKOFF_BASE_MS); unset in prod. Read live per request.
+function requestTimeoutMs(): number {
+  return Number(process.env.NETSPY_REQUEST_TIMEOUT_MS ?? 15_000);
+}
 
 function backoff(attempt: number): Promise<void> {
   // 250ms, 500ms, 1000ms — short enough to stay within a request's patience when
@@ -128,7 +133,7 @@ async function request<T = unknown>(
   let lastError = "request failed";
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), requestTimeoutMs());
     try {
       const resp = await fetch(url, {
         method,

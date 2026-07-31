@@ -318,6 +318,42 @@ test("each retry re-sends the identical signed body", async () => {
   }
 });
 
+// --- Timeout: a hung partner server must not stall syncs indefinitely -------
+
+test("a request that never resolves is aborted at the timeout, retried, then surfaced", async () => {
+  // Shrink the abort window so the test stays fast (mirrors NETSPY_BACKOFF_BASE_MS).
+  process.env.NETSPY_REQUEST_TIMEOUT_MS = "20";
+  try {
+    calls = [];
+    // Fetch mock that never resolves on its own; rejects with an AbortError
+    // only when the client's timeout fires the signal.
+    globalThis.fetch = (url, init = {}) => {
+      calls.push({ url: String(url), method: init.method, headers: init.headers ?? {} });
+      return new Promise((_resolve, reject) => {
+        init.signal.addEventListener("abort", () => {
+          reject(new DOMException("This operation was aborted", "AbortError"));
+        });
+      });
+    };
+    const start = Date.now();
+    const res = await syncCaseStatus({
+      unifiedCaseId: 1,
+      investigationStatus: "x",
+      recoveryStatus: "y",
+    });
+    // Treated as transient: retried up to 3 attempts, then surfaced as status 0.
+    assert.equal(calls.length, 3);
+    assert.equal(res.ok, false);
+    assert.equal(res.status, 0);
+    assert.match(res.error, /aborted/i);
+    // Proof the timeout fired rather than the promise hanging forever: the
+    // whole call finished in far less than one 15s default timeout.
+    assert.ok(Date.now() - start < 5000);
+  } finally {
+    delete process.env.NETSPY_REQUEST_TIMEOUT_MS;
+  }
+});
+
 // --- Gating -------------------------------------------------------------------
 
 test("client short-circuits without fetch when outbound is disabled", async () => {
