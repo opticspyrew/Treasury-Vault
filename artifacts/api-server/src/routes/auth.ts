@@ -1055,7 +1055,16 @@ router.get("/recovery-history", async (req: Request, res: Response): Promise<voi
     const entries = page
       .map((r) => {
         const meta = (r.metadata ?? {}) as Record<string, unknown>;
-        const amountUsd = typeof meta.amountUsd === "number" ? meta.amountUsd : Number(meta.amountUsd);
+        // Coerce numeric strings, but treat null / empty / non-numeric values
+        // as unparseable (Number(null) and Number("") are 0, which would
+        // otherwise render a bogus $0 credit).
+        const rawAmount = meta.amountUsd;
+        const amountUsd =
+          typeof rawAmount === "number"
+            ? rawAmount
+            : typeof rawAmount === "string" && rawAmount.trim() !== ""
+              ? Number(rawAmount)
+              : NaN;
         const runningTotalUsd =
           typeof meta.recoveredUsd === "number" ? meta.recoveredUsd : null;
         if (!Number.isFinite(amountUsd)) return null;
