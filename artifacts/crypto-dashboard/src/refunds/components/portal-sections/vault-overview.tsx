@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { getAlerts, getCases, getVaultSummary } from "../../data/mocks";
 import type { CaseSeverity, CaseStatus } from "../../data/types";
+import { useAuth } from "@/lib/auth-context";
+import { authApi, type RecoveryMetrics } from "@/lib/api";
 
 const SEVERITY_TONE: Record<CaseSeverity, string> = {
   low: "bg-emerald-500/10 text-emerald-300 border-emerald-500/30",
@@ -46,34 +48,60 @@ export default function VaultOverview() {
   const summary = useMemo(() => getVaultSummary(), []);
   const cases = useMemo(() => getCases(), []);
   const alerts = useMemo(() => getAlerts(), []);
+  const { token } = useAuth();
+  const [metrics, setMetrics] = useState<RecoveryMetrics | null>(null);
+  const [metricsError, setMetricsError] = useState(false);
+
+  useEffect(() => {
+    // Personal figures documented at signup/intake replace the synthetic demo
+    // summary: reported loss = "Assets in total" at signup; at-risk = reported
+    // loss minus what admins have credited to the vault.
+    if (!token) return;
+    let cancelled = false;
+    authApi
+      .recoveryMetrics(token)
+      .then((res) => {
+        if (!cancelled) setMetrics(res.metrics);
+      })
+      .catch(() => {
+        if (!cancelled) setMetricsError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const loading = !metrics && !metricsError;
+  const showValue = (fn: (m: RecoveryMetrics) => string): string => {
+    if (metrics) return fn(metrics);
+    return loading ? "…" : "—";
+  };
 
   const kpiCards = [
     {
       label: "Recovered to vault",
-      value: fmtUsd(summary.recoveredUsd),
-      sub: `${summary.recoveryRatePct}% of reported loss`,
+      value: showValue((m) => fmtUsd(m.recoveredUsd)),
+      sub: metrics ? `${metrics.recoveryRatePct}% of reported loss` : "Credited by our recovery team",
       icon: <ShieldCheck className="w-5 h-5 text-[hsl(var(--refunds-success))]" />,
       accent: "from-emerald-500/15 to-transparent",
     },
     {
       label: "At-risk balance",
-      value: fmtUsd(summary.atRiskUsd),
+      value: showValue((m) => fmtUsd(m.atRiskUsd)),
       sub: "Active investigations",
       icon: <ShieldAlert className="w-5 h-5 text-[hsl(var(--refunds-alert))]" />,
       accent: "from-amber-500/15 to-transparent",
     },
     {
       label: "Reported loss",
-      value: fmtUsd(summary.reportedLossUsd),
-      sub: `${summary.totalCases} cases on file`,
+      value: showValue((m) => fmtUsd(m.reportedLossUsd)),
+      sub: metrics?.documented ? "Documented at signup" : "Awaiting case details",
       icon: <CircleDollarSign className="w-5 h-5 text-accent" />,
       accent: "from-sky-500/15 to-transparent",
     },
     {
       label: "Composite risk score",
-      value: `${Math.round(
-        cases.reduce((s, c) => s + c.riskScore, 0) / Math.max(1, cases.length),
-      )} / 100`,
+      value: showValue((m) => `${m.riskScore} / 100`),
       sub: `${summary.liveAlerts} live alerts • ${summary.averageResolutionDays}d avg. resolution`,
       icon: <Gauge className="w-5 h-5 text-primary" />,
       accent: "from-primary/15 to-transparent",

@@ -59,6 +59,8 @@ export const api = {
     req<{ user: User }>("PATCH", `/users/${id}/balance`, data),
   unlockUserLogin: (id: number) =>
     req<{ success: boolean }>("POST", `/users/${id}/unlock-login`),
+  recordUserRecovery: (id: number, data: { amountUsd: number }) =>
+    req<{ user: User }>("POST", `/users/${id}/record-recovery`, data),
 
   getWalletConfigs: () => req<{ configs: WalletConfig[] }>("GET", "/wallet-configs"),
   createWalletConfig: (data: { symbol: string; network: string; address: string; label?: string; sortOrder?: number }) =>
@@ -211,6 +213,9 @@ export interface User {
   name: string;
   email: string;
   balanceBtc: number;
+  reportedLossUsd?: number | null;
+  recoveredUsd?: number;
+  scammedVia?: string | null;
   createdAt: string;
   updatedAt: string;
   loginThrottle?: LoginThrottleInfo;

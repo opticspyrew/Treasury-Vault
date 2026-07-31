@@ -31,6 +31,14 @@ export const users = pgTable("users", {
   // (e.g. "Payment Firm: CashApp"). Nullable for accounts created before
   // this field existed.
   scammedVia: text("scammed_via"),
+  // Documented "Assets in total ($)" figure captured at signup (or via the
+  // post-social-signup intake popup). Drives the Recovery Portal's
+  // "Reported loss" card. Null = never documented (legacy accounts or social
+  // signups that haven't completed intake yet).
+  reportedLossUsd: real("reported_loss_usd"),
+  // Cumulative USD recovered/credited to the vault for this user. At-risk
+  // balance is derived: reportedLossUsd - recoveredUsd (floored at 0).
+  recoveredUsd: real("recovered_usd").notNull().default(0),
   // Per-user notification email toggles. Null = no preference set yet, which
   // the API resolves to "all enabled". Security-critical emails are never
   // gated on this column.
