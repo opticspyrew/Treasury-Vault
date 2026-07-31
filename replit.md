@@ -18,7 +18,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ## Artifacts
 
-- **CryptoVault** (`artifacts/crypto-dashboard`) — React/Vite dark-themed crypto withdrawal dashboard at `/`
+- **Treasury Vault** (`artifacts/crypto-dashboard`) — React/Vite dark-themed crypto withdrawal dashboard at `/`
   - Auth (simulated), $20K balance, trade/convert/market tabs, wallet actions, transaction history
   - Invoice page: 15% fee ($3,000) on $20K withdrawal with 8 dynamically-weighted line items and staple SVG decoration
   - Link Account page: 190+ countries, 70+ currencies, bank search, card preview
@@ -36,6 +36,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
   - Auth: `X-Admin-Token: <username>:<password>` header (env vars: `ADMIN_USERNAME`, `ADMIN_PASSWORD`)
   - User auth routes: `/api/auth/signup`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/me` (Bearer token in `Authorization` header)
   - Passwords are hashed server-side with PBKDF2 (sha256, 210k iterations) and stored in the `users` table; sessions live in `user_sessions` and last 30 days
+  - Optional `SUPPORT_EMAIL` env var overrides the default support/admin contact address (`Opticspycrew@gmail.com`) shown in the password-changed user email and used as the recipient of admin notification emails
   - Primary user `pgeitz@hotmail.com` / `Centuryhacks` is seeded into the `users` table on startup if missing
 
 ## Database Tables
@@ -43,7 +44,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `admin_clients` — firm client records
 - `admin_service_requests` — withdrawal/payment/other requests linked to clients
 - `admin_activity_log` — chronological event log
-- `users` — CryptoVault end-user accounts (server-side, PBKDF2-hashed passwords)
+- `users` — Treasury Vault end-user accounts (server-side, PBKDF2-hashed passwords)
 - `user_sessions` — opaque bearer tokens for end-user sessions (30-day expiry)
 
 ## Key Commands

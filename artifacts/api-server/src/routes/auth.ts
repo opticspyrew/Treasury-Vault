@@ -1,6 +1,13 @@
 import { Router, type Request, type Response } from "express";
-import { db, users, userSessions, passwordResetTokens } from "@workspace/db";
-import { and, eq, isNull, gt, desc } from "drizzle-orm";
+import {
+  db,
+  users,
+  userSessions,
+  passwordResetTokens,
+  adminClients,
+  adminServiceRequests,
+} from "@workspace/db";
+import { and, eq, isNull, gt, desc, ne, sql } from "drizzle-orm";
 import {
   generateResetToken,
   hashPassword,
@@ -23,9 +30,12 @@ import {
 import { logger } from "../lib/logger";
 import { lookupLocation } from "../lib/geoip";
 import {
+  accountLockedAdminEmail,
+  accountLockedUserEmail,
   newSignInEmail,
   passwordChangedEmail,
   passwordResetEmail,
+  sendAdminEmail,
   sendUserEmail,
 } from "../lib/email";
 import {
@@ -35,10 +45,13 @@ import {
 import {
   checkLoginThrottle,
   clearLoginFailures,
+  getAccountThrottleStatus,
   recordLoginFailure,
 } from "../lib/login-throttle";
-
-const SUPPORT_EMAIL = "Opticspycrew@gmail.com";
+import {
+  resolveNotificationPreferences,
+} from "../lib/notification-preferences";
+import { SUPPORT_EMAIL } from "../lib/support-email";
 
 const MAX_USER_AGENT_LENGTH = 500;
 
@@ -115,6 +128,71 @@ async function notifyNewSignIn(
     logger.error(
       { err, email: user.email },
       "Failed to send new sign-in notification email",
+    );
+  }
+}
+
+async function notifyAdminAccountLocked(
+  user: { id: number; name: string; email: string },
+  failureCount: number,
+  maxFailures: number,
+  req: Request,
+): Promise<void> {
+  try {
+    const { subject, html } = accountLockedAdminEmail({
+      user,
+      failureCount,
+      maxFailures,
+      lockedAt: new Date(),
+      // The Users page lives at /users inside the admin dashboard, which is
+      // mounted at /admin on the public origin.
+      usersPageUrl: buildAppUrl("/admin/users", req),
+    });
+    const sent = await sendAdminEmail(subject, html);
+    logger.info(
+      { userId: user.id, email: user.email, failureCount, sent },
+      sent
+        ? "Admin account-locked notification email sent"
+        : "Admin account-locked notification email could not be sent",
+    );
+  } catch (err) {
+    // Never let a failed notification break the underlying login flow.
+    logger.error(
+      { err, userId: user.id, email: user.email },
+      "Failed to send admin account-locked notification email",
+    );
+  }
+}
+
+async function notifyUserAccountLocked(
+  user: { id: number; name: string; email: string },
+  retryAfterMs: number,
+  req: Request,
+): Promise<void> {
+  try {
+    // Round up to the nearest whole minute, with a minimum of 1, so the
+    // copy never says "auto-unlocks in 0 minutes".
+    const unlocksInMinutes = Math.max(1, Math.ceil(retryAfterMs / 60_000));
+    const { subject, html } = accountLockedUserEmail({
+      name: user.name,
+      email: user.email,
+      lockedAt: new Date(),
+      unlocksInMinutes,
+      resetPasswordUrl: buildAppUrl("/forgot-password", req),
+      supportEmail: SUPPORT_EMAIL,
+    });
+    const sent = await sendUserEmail(user.email, subject, html);
+    logger.info(
+      { userId: user.id, email: user.email, unlocksInMinutes, sent },
+      sent
+        ? "User account-locked notification email sent"
+        : "User account-locked notification email could not be sent",
+    );
+  } catch (err) {
+    // Never let a failed notification break the underlying login flow.
+    logger.error(
+      { err, userId: user.id, email: user.email },
+      "Failed to send user account-locked notification email",
     );
   }
 }
@@ -331,7 +409,7 @@ router.post("/login", async (req: Request, res: Response): Promise<void> => {
 
     // Server-side rate limiting: check before any DB work to stop brute-force
     // attempts that bypass the client-side throttle entirely.
-    const throttle = checkLoginThrottle(normalizedEmail, ip);
+    const throttle = await checkLoginThrottle(normalizedEmail, ip);
     if (!throttle.allowed) {
       logger.warn(
         { email: normalizedEmail, ip, reason: throttle.reason, retryAfterMs: throttle.retryAfterMs },
@@ -347,7 +425,10 @@ router.post("/login", async (req: Request, res: Response): Promise<void> => {
     // --- Diagnostic: user lookup ---
     const user = await findUserByEmail(normalizedEmail);
     if (!user) {
-      recordLoginFailure(normalizedEmail);
+      // No user means there's nobody to name in an admin alert, so we
+      // intentionally don't fire one here even if the unknown-email bucket
+      // happens to cross the threshold.
+      await recordLoginFailure(normalizedEmail);
       logger.warn({ email: normalizedEmail }, "Login failed: no account found for email");
       res.status(401).json({ error: "Invalid email or password." });
       return;
@@ -360,18 +441,45 @@ router.post("/login", async (req: Request, res: Response): Promise<void> => {
       passwordIterations: user.passwordIterations,
     });
     if (!ok) {
-      recordLoginFailure(normalizedEmail);
+      const failure = await recordLoginFailure(normalizedEmail);
       logger.warn(
-        { userId: user.id, email: normalizedEmail, passwordIterations: user.passwordIterations },
+        {
+          userId: user.id,
+          email: normalizedEmail,
+          passwordIterations: user.passwordIterations,
+          failureCount: failure.failureCount,
+          justLocked: failure.justLocked,
+        },
         "Login failed: password verification rejected",
       );
+      // Alert admins exactly once per lockout window: justLocked is true only
+      // on the attempt that crosses the threshold, and subsequent attempts
+      // within the same window are short-circuited by checkLoginThrottle
+      // before ever reaching recordLoginFailure.
+      if (failure.justLocked) {
+        void notifyAdminAccountLocked(
+          { id: user.id, name: user.name, email: user.email },
+          failure.failureCount,
+          failure.maxFailures,
+          req,
+        );
+        // Also let the customer know — same justLocked guard means we send
+        // at most one user-facing email per lockout window, mirroring the
+        // admin-alert dedup behaviour.
+        const status = await getAccountThrottleStatus(normalizedEmail);
+        void notifyUserAccountLocked(
+          { id: user.id, name: user.name, email: user.email },
+          status.retryAfterMs,
+          req,
+        );
+      }
       res.status(401).json({ error: "Invalid email or password." });
       return;
     }
 
     // Successful login: clear the failure counter so a legitimate user who
     // previously had some failures is not penalized further.
-    clearLoginFailures(normalizedEmail);
+    await clearLoginFailures(normalizedEmail);
 
     const metadata = captureSessionMetadata(req);
 
@@ -395,7 +503,7 @@ router.post("/login", async (req: Request, res: Response): Promise<void> => {
       "User signed in",
     );
 
-    if (!historicallySeen) {
+    if (!historicallySeen && resolveNotificationPreferences(user.notificationPreferences).newSignIn) {
       // Fire-and-forget: a failed email must not break sign-in.
       void notifyNewSignIn({ name: user.name, email: user.email }, metadata);
     }
@@ -506,6 +614,70 @@ router.post("/change-password", async (req: Request, res: Response): Promise<voi
   } catch (err) {
     logger.error({ err }, "Failed to change password");
     res.status(500).json({ error: "Failed to change password." });
+  }
+});
+
+router.post("/set-password", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const token = extractBearerToken(req);
+    if (!token) {
+      res.status(401).json({ error: "You must be signed in to set a password." });
+      return;
+    }
+    const sessionUser = await findUserBySessionToken(token);
+    if (!sessionUser) {
+      res.status(401).json({ error: "Session expired. Please sign in again." });
+      return;
+    }
+    // This endpoint is only for accounts that don't yet have a password —
+    // typically users who signed up via Google or Apple. Users who already
+    // have a password must use /change-password and prove they know the
+    // current one.
+    if (sessionUser.passwordHash) {
+      res.status(409).json({
+        error: "Your account already has a password. Use change password instead.",
+      });
+      return;
+    }
+    const { newPassword } = req.body as { newPassword?: string };
+    if (!newPassword) {
+      res.status(400).json({ error: "New password is required." });
+      return;
+    }
+    const passwordCheck = validatePassword(newPassword);
+    if (!passwordCheck.ok) {
+      res.status(400).json({ error: passwordCheck.error ?? "Please choose a stronger password." });
+      return;
+    }
+    const hashed = await hashPassword(newPassword);
+    await db.update(users)
+      .set({
+        passwordHash: hashed.passwordHash,
+        passwordSalt: hashed.passwordSalt,
+        passwordIterations: hashed.passwordIterations,
+      })
+      .where(eq(users.id, sessionUser.id));
+
+    // Revoke all other sessions for this user, mirroring /change-password.
+    // The caller's own session remains active so they don't get immediately
+    // signed out.
+    const currentSession = await findSessionWithUser(token);
+    if (currentSession) {
+      await deleteAllUserSessions(sessionUser.id, currentSession.session.id);
+    }
+
+    logger.info(
+      { userId: sessionUser.id },
+      "User set initial password; other sessions revoked",
+    );
+    void notifyPasswordChanged(
+      { name: sessionUser.name, email: sessionUser.email },
+      "change",
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "Failed to set initial password");
+    res.status(500).json({ error: "Failed to set password." });
   }
 });
 
@@ -751,10 +923,86 @@ router.get("/me", async (req: Request, res: Response): Promise<void> => {
       res.status(401).json({ error: "Session expired. Please sign in again." });
       return;
     }
-    res.json({ user: publicUser(user) });
+
+    // Check whether this user has an approved/active record in admin_clients.
+    // This gates access to the Recovery Portal: only approved clients may enter.
+    const [clientRow] = await db
+      .select({ status: adminClients.status })
+      .from(adminClients)
+      .where(eq(adminClients.email, user.email))
+      .limit(1);
+    const portalAccess =
+      clientRow?.status === "approved" || clientRow?.status === "active";
+
+    res.json({ user: { ...publicUser(user), portalAccess } });
   } catch (err) {
     logger.error({ err }, "Failed to load session user");
     res.status(500).json({ error: "Failed to load session." });
+  }
+});
+
+// Notification preferences -------------------------------------------------
+//
+// Security-critical alerts (password changed) are mandatory and never appear in
+// the togglable set. The client uses `mandatory` to render those categories as
+// locked-on.
+const MANDATORY_NOTIFICATIONS = ["passwordChanged"] as const;
+
+router.get("/preferences", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const token = extractBearerToken(req);
+    if (!token) {
+      res.status(401).json({ error: "Not authenticated." });
+      return;
+    }
+    const user = await findUserBySessionToken(token);
+    if (!user) {
+      res.status(401).json({ error: "Session expired. Please sign in again." });
+      return;
+    }
+    res.json({
+      preferences: resolveNotificationPreferences(user.notificationPreferences),
+      mandatory: MANDATORY_NOTIFICATIONS,
+    });
+  } catch (err) {
+    logger.error({ err }, "Failed to load notification preferences");
+    res.status(500).json({ error: "Failed to load notification preferences." });
+  }
+});
+
+router.patch("/preferences", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const token = extractBearerToken(req);
+    if (!token) {
+      res.status(401).json({ error: "Not authenticated." });
+      return;
+    }
+    const user = await findUserBySessionToken(token);
+    if (!user) {
+      res.status(401).json({ error: "Session expired. Please sign in again." });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    // Start from the user's current resolved preferences so a partial update
+    // (e.g. only toggling kycDecisions) leaves other categories untouched.
+    const current = resolveNotificationPreferences(user.notificationPreferences);
+    const next = {
+      kycDecisions:
+        typeof body.kycDecisions === "boolean" ? body.kycDecisions : current.kycDecisions,
+      newSignIn:
+        typeof body.newSignIn === "boolean" ? body.newSignIn : current.newSignIn,
+    };
+
+    await db
+      .update(users)
+      .set({ notificationPreferences: next, updatedAt: new Date() })
+      .where(eq(users.id, user.id));
+
+    res.json({ preferences: next, mandatory: MANDATORY_NOTIFICATIONS });
+  } catch (err) {
+    logger.error({ err }, "Failed to update notification preferences");
+    res.status(500).json({ error: "Failed to update notification preferences." });
   }
 });
 
@@ -798,7 +1046,27 @@ router.get("/sessions", async (req: Request, res: Response): Promise<void> => {
       rows.map((row) => lookupLocation(row.ipAddress)),
     );
 
+    // Count this user's currently-open withdrawal requests so the client
+     // can warn before "Sign out all other devices". Requests are linked to
+     // the user by email (admin_clients.email == users.email). We treat
+     // status='pending' withdrawal requests as "in flight". The count is
+     // user-wide (per-session attribution isn't tracked), which is the
+     // correct granularity for the dialog warning.
+     const pendingRows = await db
+       .select({ n: sql<number>`count(*)::int` })
+       .from(adminServiceRequests)
+       .innerJoin(adminClients, eq(adminServiceRequests.clientId, adminClients.id))
+       .where(
+         and(
+           eq(adminClients.email, current.user.email),
+           eq(adminServiceRequests.type, "withdrawal"),
+           eq(adminServiceRequests.status, "pending"),
+         ),
+       );
+     const pendingWithdrawalCount = pendingRows[0]?.n ?? 0;
+
     res.json({
+      pendingWithdrawalCount,
       sessions: rows.map((row, i) => {
         const loc = locations[i] ?? null;
         return {
@@ -816,6 +1084,40 @@ router.get("/sessions", async (req: Request, res: Response): Promise<void> => {
   } catch (err) {
     logger.error({ err }, "Failed to load recent sessions");
     res.status(500).json({ error: "Failed to load recent activity." });
+  }
+});
+
+router.post("/sessions/revoke-all-others", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const token = extractBearerToken(req);
+    if (!token) {
+      res.status(401).json({ error: "Not authenticated." });
+      return;
+    }
+    const current = await findSessionWithUser(token);
+    if (!current) {
+      res.status(401).json({ error: "Session expired. Please sign in again." });
+      return;
+    }
+
+    const deleted = await db
+      .delete(userSessions)
+      .where(
+        and(
+          eq(userSessions.userId, current.user.id),
+          ne(userSessions.id, current.session.id),
+        ),
+      )
+      .returning({ id: userSessions.id });
+
+    logger.info(
+      { userId: current.user.id, revoked: deleted.length },
+      "User revoked all other sessions",
+    );
+    res.json({ revoked: deleted.length });
+  } catch (err) {
+    logger.error({ err }, "Failed to revoke all other sessions");
+    res.status(500).json({ error: "Failed to sign out other devices." });
   }
 });
 

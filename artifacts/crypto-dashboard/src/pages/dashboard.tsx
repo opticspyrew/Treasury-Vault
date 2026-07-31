@@ -44,7 +44,7 @@ export default function Dashboard() {
   const [receiptTx, setReceiptTx] = useState<Transaction | null>(null);
   const { transactions, cancelTransaction, setTransactions } = useTransactions();
   useApprovalPoller(transactions, setTransactions);
-  const { usd: totalBalance, btcFormatted, usdFormatted } = useBalance();
+  const { usd: totalBalance, btc: totalBtc, btcFormatted, usdFormatted } = useBalance();
   const { fmt } = useCurrency();
 
   const portfolioAssets = [
@@ -159,6 +159,9 @@ export default function Dashboard() {
                 <h2 className="text-4xl font-bold text-foreground">
                   {fmt(totalBalance)}
                 </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  ≈ {totalBtc.toFixed(8)} BTC
+                </p>
                 <div className="flex items-center gap-1.5 mt-2">
                   <span className={`text-sm font-medium ${dailyMarket.up ? "text-primary" : "text-red-400"}`}>
                     {dailyMarket.changeStr}

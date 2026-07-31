@@ -1,0 +1,92 @@
+The inbound webhook integration (Replit → Netspy) is complete and verified in production. We’ve successfully received and processed test events with proper signature verification and case creation.
+
+To enable the full bidirectional integration (Netspy → Replit), we need three deliverables from your team. This email requests a status update on each.
+
+
+Pending Deliverables
+1. cases. Mutation Procedures*
+What we need:
+Implement the following tRPC procedures on your production server:
+
+	•	`cases.createUnified` — Create a new unified case
+	•	`cases.getUnified` — Retrieve a unified case with full details
+	•	`cases.syncStatus` — Sync case status between systems
+
+Current status:
+Your production API currently only exposes `system.health`. These procedures are required for Netspy to push case data back to your system.
+
+Input schemas available: See `WEBHOOK_INTEGRATION.md` for detailed specifications
+
+Timeline: When can these be implemented?
+
+
+2. Stable Production API URL
+What we need:
+A permanent, production-grade API endpoint (not an ephemeral sandbox URL).
+
+Current status:
+Your staging API is at `*.manus.computer` (Manus sandbox), which changes on restart and is unsuitable for production.
+
+Required for:
+
+	•	Configuring Netspy’s outbound sender to target your production API
+	•	Ensuring reliable, persistent data flow from Netspy to Replit
+
+Examples of acceptable URLs:
+
+	•	`https://api.refunds.site/trpc`
+	•	`https://api.netspyworld.com/trpc` (if you prefer a separate domain)
+	•	Any stable, production-grade endpoint
+
+Timeline: When will this be available?
+
+
+3. Payload Definitions
+What we need:
+Confirmation of the exact structure for three event types:
+
+a) `case.updated`
+	•	Question: Does this event contain status-only updates (e.g., `investigationStatus`, `recoveryStatus`), or general field edits (e.g., client name, case description changes)?
+	•	Impact: Determines how Netspy processes and stores updates
+
+b) `case.synced`
+	•	Question: What fields should this event contain? (We’re assuming: `unifiedCaseId`, `investigationStatus`, `recoveryStatus`, `blockchainDataUpdated`)
+	•	Impact: Ensures Netspy sends the correct data structure
+
+c) `blockchain.data.updated`
+	•	Question: What blockchain-specific data should this event include?
+	•	Impact: Allows Netspy to properly track blockchain intelligence updates
+
+Current status:
+We’ve implemented handlers for these events, but they’re currently logged as “unhandled” pending your confirmation.
+
+Timeline: Can you confirm these definitions?
+
+
+Integration Progress
+
+￼
+
+Next Steps
+Once you provide these three deliverables, we can:
+
+	1.	Configure Netspy’s outbound sender to target your production API
+	2.	Validate the payload structures with your actual event handlers
+	3.	Perform end-to-end bidirectional testing
+	4.	Enable full production integration
+
+
+Questions?
+For technical details, refer to:
+
+	•	`WEBHOOK_INTEGRATION.md` — Complete webhook specification
+	•	`PRODUCTION_DEPLOYMENT.md` — Deployment checklist and procedures
+	•	Event test scripts in `scripts/` directory
+
+
+Timeline Expectation
+We’re targeting production deployment within 2 weeks. Please let us know:
+
+	1.	ETA for each deliverable
+	2.	Any blockers or dependencies we should know about
+	3.	Preferred communication channel for technical discussions

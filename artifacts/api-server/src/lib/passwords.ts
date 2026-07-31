@@ -30,10 +30,23 @@ export async function hashPassword(password: string): Promise<HashedPassword> {
   };
 }
 
+export interface MaybeHashedPassword {
+  passwordHash: string | null;
+  passwordSalt: string | null;
+  passwordIterations: number | null;
+}
+
 export async function verifyPassword(
   password: string,
-  stored: HashedPassword,
+  stored: MaybeHashedPassword,
 ): Promise<boolean> {
+  if (
+    !stored.passwordHash ||
+    !stored.passwordSalt ||
+    !stored.passwordIterations
+  ) {
+    return false;
+  }
   try {
     const salt = Buffer.from(stored.passwordSalt, "base64");
     const expected = Buffer.from(stored.passwordHash, "base64");

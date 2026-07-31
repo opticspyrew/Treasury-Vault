@@ -14,10 +14,19 @@
 //   7. admin photo endpoint accepts header tokens
 //   8. re-approving an already-decided submission returns 409
 
-import { test, before } from "node:test";
+import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { pool } from "@workspace/db";
 
 const BASE = process.env.API_BASE_URL ?? "http://localhost:8080/api";
+
+// Track everything this suite creates so it can be deleted at the end. Users
+// cascade to their kyc_submissions and sessions, but the admin_clients (and
+// their service requests + activity-log rows) auto-created by a successful
+// /public/request are keyed by email with no cascade from users, so they must
+// be removed explicitly. Re-running the suite then leaves no DB residue.
+const createdUserIds = [];
+const createdEmails = [];
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
@@ -57,6 +66,8 @@ async function signupUser() {
   });
   assert.equal(res.status, 201, "signup should succeed");
   const body = await json(res);
+  createdUserIds.push(body.user.id);
+  createdEmails.push(email.toLowerCase());
   return { email, token: body.token, userId: body.user.id };
 }
 
@@ -119,6 +130,28 @@ before(async () => {
   const probe = await fetch(`${BASE}/public/kyc/status`).catch(() => null);
   assert.ok(probe, `API server not reachable at ${BASE}`);
   adminToken = await adminLogin();
+});
+
+// Remove all data this suite created. admin_service_requests and
+// admin_activity_log reference admin_clients without ON DELETE CASCADE, so they
+// must be deleted before the clients. Users are deleted last and cascade to
+// their kyc_submissions and sessions.
+after(async () => {
+  if (createdEmails.length > 0) {
+    const { rows } = await pool.query(
+      `SELECT id FROM admin_clients WHERE email = ANY($1::text[])`,
+      [createdEmails],
+    );
+    const clientIds = rows.map((r) => r.id);
+    if (clientIds.length > 0) {
+      await pool.query(`DELETE FROM admin_activity_log WHERE client_id = ANY($1::int[])`, [clientIds]);
+      await pool.query(`DELETE FROM admin_service_requests WHERE client_id = ANY($1::int[])`, [clientIds]);
+      await pool.query(`DELETE FROM admin_clients WHERE id = ANY($1::int[])`, [clientIds]);
+    }
+  }
+  if (createdUserIds.length > 0) {
+    await pool.query(`DELETE FROM users WHERE id = ANY($1::int[])`, [createdUserIds]);
+  }
 });
 
 test("1) anonymous send is blocked (401)", async () => {

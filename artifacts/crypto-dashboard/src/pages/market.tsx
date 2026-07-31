@@ -26,7 +26,19 @@ export default function Market() {
   const [sortBy, setSortBy] = useState<"rank" | "change">("rank");
   const { btcPriceUsd, ratesLoading } = useCurrency();
 
-  const filtered = marketData
+  const livePricedData = marketData.map(c =>
+    c.symbol === "BTC" && btcPriceUsd > 0
+      ? {
+          ...c,
+          price: btcPriceUsd.toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          }),
+        }
+      : c,
+  );
+
+  const filtered = livePricedData
     .filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.symbol.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       if (sortBy === "change") {
@@ -135,7 +147,18 @@ export default function Market() {
                         </div>
                       </div>
                     </td>
-                    <td className="p-4 text-right text-sm font-medium text-foreground">${coin.price}</td>
+                    <td
+                      className="p-4 text-right text-sm font-medium text-foreground"
+                      data-testid={`market-price-${coin.symbol}`}
+                    >
+                      {coin.symbol === "BTC" && !formattedBtcPrice ? (
+                        <span className="text-muted-foreground animate-pulse">
+                          {ratesLoading ? "Loading…" : "Unavailable"}
+                        </span>
+                      ) : (
+                        <>${coin.price}</>
+                      )}
+                    </td>
                     <td className="p-4 text-right">
                       <span className={`text-sm font-semibold ${coin.up ? "text-primary" : "text-destructive"}`}>
                         {coin.change}

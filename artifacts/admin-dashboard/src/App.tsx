@@ -519,8 +519,17 @@ function ActivityPage() {
 const ADMIN_BTC_PRICE_USD = 27000;
 const fmtUsd = (usd: number) => `$${usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+function formatLockoutRemaining(ms: number): string {
+  if (ms <= 0) return "<1m left";
+  const totalSec = Math.ceil(ms / 1000);
+  if (totalSec < 60) return `${totalSec}s left`;
+  const totalMin = Math.ceil(totalSec / 60);
+  return `${totalMin}m left`;
+}
+
 function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [lockedCount, setLockedCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -530,12 +539,16 @@ function UsersPage() {
   const [editMsg, setEditMsg] = useState("");
   const [unlockingId, setUnlockingId] = useState<number | null>(null);
   const [unlockMsg, setUnlockMsg] = useState("");
+  // Drives a 1s re-render so the "Xm left" countdown ticks down between
+  // polls without needing another network round-trip.
+  const [, setNowTick] = useState(0);
 
   const unlockLogin = async (u: User) => {
     setUnlockingId(u.id); setUnlockMsg("");
     try {
       await api.unlockUserLogin(u.id);
       setUnlockMsg(`✓ Sign-in unlocked for ${u.email}. They can retry immediately.`);
+      load();
     } catch (err) {
       setUnlockMsg(`Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -545,11 +558,18 @@ function UsersPage() {
 
   const load = () => {
     api.getUsers()
-      .then(r => setUsers(r.users))
+      .then(r => { setUsers(r.users); setLockedCount(r.lockedCount ?? 0); })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    // Refresh lockout state in the background so admins see locked accounts
+    // appear/disappear without manually reloading.
+    const poll = window.setInterval(load, 15_000);
+    const tick = window.setInterval(() => setNowTick(t => t + 1), 1_000);
+    return () => { window.clearInterval(poll); window.clearInterval(tick); };
+  }, []);
 
   const openEdit = (u: User) => {
     const usd = (u.balanceBtc ?? 0) * ADMIN_BTC_PRICE_USD;
@@ -579,8 +599,23 @@ function UsersPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-xl font-bold text-foreground">Registered Users</h2>
-        <p className="text-sm text-muted-foreground">All CryptoVault accounts. Password material is never sent to the browser.</p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h2 className="text-xl font-bold text-foreground">Registered Users</h2>
+          {lockedCount > 0 && (
+            <span
+              title={`${lockedCount} account${lockedCount === 1 ? " is" : "s are"} currently locked from too many failed sign-in attempts. They appear at the top of the list.`}
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-rose-100 text-rose-800 border border-rose-200"
+              data-testid="users-locked-count"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+              {lockedCount} locked
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground">
+          All Treasury Vault accounts. Password material is never sent to the browser.
+          {lockedCount > 0 && " Locked accounts are listed first."}
+        </p>
       </div>
       {unlockMsg && (
         <div className={cn("p-3 rounded-lg text-sm border flex items-start gap-2", unlockMsg.startsWith("Error") ? "bg-red-50 text-red-700 border-red-200" : "bg-emerald-50 text-emerald-700 border-emerald-200")}>
@@ -599,12 +634,34 @@ function UsersPage() {
           <div className="divide-y divide-border">
             {users.map(u => {
               const balanceUsd = (u.balanceBtc ?? 0) * ADMIN_BTC_PRICE_USD;
+              const throttle = u.loginThrottle;
+              const isLocked = !!throttle?.locked;
+              const hasFailures = (throttle?.failureCount ?? 0) > 0;
               return (
                 <div key={u.id} className="px-5 py-4">
                   <div className="flex items-center gap-4 flex-wrap">
                     <span className="w-6 text-xs text-muted-foreground font-mono">#{u.id}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{u.name}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-foreground truncate">{u.name}</p>
+                        {isLocked && (
+                          <span
+                            title={`Account is locked after ${throttle?.failureCount ?? 0} failed sign-in attempts. Auto-unlocks in ${formatLockoutRemaining(throttle?.retryAfterMs ?? 0)}.`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-rose-100 text-rose-800 border border-rose-200"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                            Locked — {formatLockoutRemaining(throttle?.retryAfterMs ?? 0)}
+                          </span>
+                        )}
+                        {!isLocked && hasFailures && (
+                          <span
+                            title={`${throttle?.failureCount} recent failed sign-in attempt(s) in the rolling window`}
+                            className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded-full bg-amber-50 text-amber-800 border border-amber-200"
+                          >
+                            {throttle?.failureCount}/{throttle?.maxFailures} failed attempts
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground truncate">{u.email}</p>
                     </div>
                     <div className="text-right">
@@ -621,9 +678,16 @@ function UsersPage() {
                       </button>
                       <button
                         onClick={() => void unlockLogin(u)}
-                        disabled={unlockingId === u.id}
-                        title="Clear this account's sign-in failure counter so the user can retry immediately"
-                        className="text-xs px-2 py-1 rounded-md bg-amber-100 text-amber-800 hover:bg-amber-200 transition-colors border border-amber-200 disabled:opacity-60"
+                        disabled={unlockingId === u.id || !isLocked}
+                        title={isLocked
+                          ? "Clear this account's sign-in failure counter so the user can retry immediately"
+                          : "This account is not currently locked. The unlock action is only needed after too many failed sign-in attempts."}
+                        className={cn(
+                          "text-xs px-2 py-1 rounded-md border transition-colors disabled:cursor-not-allowed",
+                          isLocked
+                            ? "bg-rose-600 text-white border-rose-600 hover:bg-rose-700 shadow-sm font-semibold animate-pulse disabled:opacity-70 disabled:animate-none"
+                            : "bg-muted text-muted-foreground border-input opacity-60 hover:opacity-80",
+                        )}
                       >
                         {unlockingId === u.id ? "Unlocking…" : "Unlock sign-in"}
                       </button>

@@ -49,6 +49,26 @@ export function getCharClasses(password: string): Set<CharClass> {
   return classes;
 }
 
+export interface PasswordRuleStatuses {
+  minLength: boolean;
+  notCommon: boolean;
+  mixedClasses: boolean;
+}
+
+export const PASSWORD_RULE_LABELS: Record<keyof PasswordRuleStatuses, string> = {
+  minLength: `At least ${MIN_PASSWORD_LENGTH} characters`,
+  notCommon: "Not a commonly-used password",
+  mixedClasses: "Mix at least two of: letters, numbers, symbols",
+};
+
+export function checkPasswordRules(password: string): PasswordRuleStatuses {
+  return {
+    minLength: password.length >= MIN_PASSWORD_LENGTH,
+    notCommon: password.length > 0 && !COMMON_PASSWORDS.has(password.toLowerCase()),
+    mixedClasses: getCharClasses(password).size >= 2,
+  };
+}
+
 export interface PasswordValidationResult {
   ok: boolean;
   error?: string;

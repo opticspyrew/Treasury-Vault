@@ -11,6 +11,90 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
+[[workflows.workflow]]
+name = "artifacts/admin-dashboard: web"
+author = "agent"
+mode = "sequential"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+artifactId = "artifacts/admin-dashboard"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/admin-dashboard run dev"
+cwd = "./artifacts/admin-dashboard"
+waitForPort = 22133
+ensurePreviewReachable = "/"
+router = "path"
+
+[workflows.workflow.tasks.env]
+PORT = "22133"
+BASE_PATH = "/admin/"
+
+[[workflows.workflow]]
+name = "artifacts/crypto-dashboard: web"
+author = "agent"
+mode = "sequential"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+artifactId = "artifacts/crypto-dashboard"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/crypto-dashboard run dev"
+cwd = "./artifacts/crypto-dashboard"
+waitForPort = 20512
+ensurePreviewReachable = "/"
+router = "path"
+
+[workflows.workflow.tasks.env]
+PORT = "20512"
+BASE_PATH = "/"
+
+[[workflows.workflow]]
+name = "artifacts/api-server: API Server"
+author = "agent"
+mode = "sequential"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+artifactId = "3B4_FFSkEVBkAeYMFRJ2e"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/api-server run dev"
+cwd = "./artifacts/api-server"
+waitForPort = 8080
+ensurePreviewReachable = "/"
+router = "path"
+
+[workflows.workflow.tasks.env]
+PORT = "8080"
+
+[[workflows.workflow]]
+name = "artifacts/mockup-sandbox: Component Preview Server"
+author = "agent"
+mode = "sequential"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+artifactId = "XegfDyZt7HqfW2Bb8Ghoy"
+isCanvasWorkflow = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/mockup-sandbox run dev"
+cwd = "./artifacts/mockup-sandbox"
+waitForPort = 8081
+ensurePreviewReachable = "/"
+router = "path"
+
+[workflows.workflow.tasks.env]
+PORT = "8081"
+BASE_PATH = "/__mockup"
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
@@ -21,7 +105,6 @@ timeoutMs = 20000
 
 [[ports]]
 localPort = 8080
-externalPort = 80
 
 [[ports]]
 localPort = 8081
@@ -29,7 +112,6 @@ externalPort = 8081
 
 [[ports]]
 localPort = 8082
-externalPort = 5000
 
 [[ports]]
 localPort = 8083
@@ -38,6 +120,10 @@ externalPort = 6800
 [[ports]]
 localPort = 8084
 externalPort = 8008
+
+[[ports]]
+localPort = 20300
+externalPort = 3002
 
 [[ports]]
 localPort = 20512
@@ -77,7 +163,7 @@ externalPort = 8000
 
 [rules.formatter.fileExtensions]
 
-[rules.formatter.fileExtensions.".json"]
+[rules.formatter.fileExtensions.".ts"]
 id = "module:nodejs-24/languageServer:typescript-language-server"
 
 [nix]
@@ -86,6 +172,14 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.shared]
+
+[userenv.development]
+MANUS_INBOUND_SYNC_ENABLED = "1"
+MANUS_OUTBOUND_SYNC_ENABLED = "1"
+NETSPY_API_BASE_URL = "https://netspyworld.manus.space/api/trpc"
+
+[userenv.production]
+MANUS_INBOUND_SYNC_ENABLED = "1"
 
 [objectStorage]
 defaultBucketID = "replit-objstore-c057b35a-4507-4039-99d9-08e090d0a00a"

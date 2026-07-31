@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { authApi, type AuthSessionRecord } from "@/lib/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 function formatTimestamp(iso: string): string {
   const d = new Date(iso);
@@ -72,6 +82,11 @@ function flagEmojiFromCountryCode(code: string | null): string | null {
 export default function RecentActivityPanel() {
   const { token } = useAuth();
   const [sessions, setSessions] = useState<AuthSessionRecord[] | null>(null);
+  // User-level count of currently-pending withdrawal requests. Surfaced in
+  // the "Sign out all other devices" confirmation so a power user who has a
+  // withdrawal flow open on another device (e.g. hardware-wallet
+  // confirmation) gets a heads-up before revoking that session.
+  const [pendingWithdrawalCount, setPendingWithdrawalCount] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   // Tracks which session is currently being revoked. The active row shows
@@ -80,6 +95,12 @@ export default function RecentActivityPanel() {
   // rows during the brief optimistic-update window.
   const [revokingId, setRevokingId] = useState<number | null>(null);
   const [revokeError, setRevokeError] = useState<string | null>(null);
+  // State for the "Sign out all other devices" flow: confirmation dialog
+  // visibility, in-flight indicator, and the success message that doubles
+  // as the on-screen "toast" confirming how many sessions were ended.
+  const [confirmAllOpen, setConfirmAllOpen] = useState<boolean>(false);
+  const [revokingAll, setRevokingAll] = useState<boolean>(false);
+  const [revokeAllSuccess, setRevokeAllSuccess] = useState<string | null>(null);
 
   const loadSessions = useCallback(
     async (signal?: { cancelled: boolean }) => {
@@ -87,9 +108,11 @@ export default function RecentActivityPanel() {
       setLoading(true);
       setError(null);
       try {
-        const rows = await authApi.sessions(token);
+        const { sessions: rows, pendingWithdrawalCount: count } =
+          await authApi.sessions(token);
         if (!signal?.cancelled) {
           setSessions(rows);
+          setPendingWithdrawalCount(count);
         }
       } catch (err: unknown) {
         if (!signal?.cancelled) {
@@ -113,6 +136,44 @@ export default function RecentActivityPanel() {
       signal.cancelled = true;
     };
   }, [loadSessions]);
+
+  const handleRevokeAllOthers = useCallback(async () => {
+    if (!token) return;
+    setRevokingAll(true);
+    setRevokeError(null);
+    setRevokeAllSuccess(null);
+    try {
+      const { revoked } = await authApi.revokeAllOtherSessions(token);
+      setConfirmAllOpen(false);
+      // Optimistically drop every non-current row, then re-fetch to stay
+      // in sync with the server.
+      setSessions((prev) => (prev ? prev.filter((s) => s.current) : prev));
+      await loadSessions();
+      setRevokeAllSuccess(
+        revoked === 0
+          ? "No other devices were signed in."
+          : revoked === 1
+            ? "Signed out 1 other device."
+            : `Signed out ${revoked} other devices.`,
+      );
+    } catch (err: unknown) {
+      setRevokeError(
+        err instanceof Error
+          ? err.message
+          : "Failed to sign out other devices.",
+      );
+    } finally {
+      setRevokingAll(false);
+    }
+  }, [token, loadSessions]);
+
+  // Auto-dismiss the success message after a few seconds so it behaves like
+  // a toast.
+  useEffect(() => {
+    if (!revokeAllSuccess) return;
+    const t = setTimeout(() => setRevokeAllSuccess(null), 5000);
+    return () => clearTimeout(t);
+  }, [revokeAllSuccess]);
 
   const handleRevoke = useCallback(
     async (sessionId: number) => {
@@ -178,6 +239,16 @@ export default function RecentActivityPanel() {
           data-testid="recent-activity-revoke-error"
         >
           {revokeError}
+        </p>
+      )}
+
+      {revokeAllSuccess && (
+        <p
+          className="text-sm text-primary pb-3"
+          role="status"
+          data-testid="recent-activity-revoke-all-success"
+        >
+          {revokeAllSuccess}
         </p>
       )}
 
@@ -268,6 +339,72 @@ export default function RecentActivityPanel() {
           ))}
         </ul>
       )}
+
+      {!loading && !error && sessions && sessions.some((s) => !s.current) && (
+        <div className="mt-4 pt-4 border-t border-border flex justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              setRevokeError(null);
+              setRevokeAllSuccess(null);
+              setConfirmAllOpen(true);
+            }}
+            disabled={revokingAll || revokingId !== null}
+            className="text-xs font-semibold text-destructive hover:text-destructive/80 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 rounded-md border border-destructive/30 hover:border-destructive/50 transition-colors"
+            data-testid="recent-activity-revoke-all-button"
+          >
+            Sign out all other devices
+          </button>
+        </div>
+      )}
+
+      <AlertDialog open={confirmAllOpen} onOpenChange={setConfirmAllOpen}>
+        <AlertDialogContent data-testid="recent-activity-revoke-all-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out all other devices?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will sign you out of every device except this one.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {pendingWithdrawalCount > 0 && (
+            <div
+              className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 p-3"
+              role="alert"
+              data-testid="recent-activity-revoke-all-pending-warning"
+            >
+              <p className="text-sm font-semibold text-destructive">
+                Heads up:{" "}
+                <span data-testid="recent-activity-revoke-all-pending-count">
+                  {pendingWithdrawalCount === 1
+                    ? "1 withdrawal request"
+                    : `${pendingWithdrawalCount} withdrawal requests`}
+                </span>{" "}
+                still pending.
+              </p>
+              <p className="text-xs text-destructive/90 mt-1">
+                Signing out other devices may interrupt a withdrawal flow in
+                progress (for example, a hardware-wallet confirmation). You can
+                still proceed if you want to.
+              </p>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={revokingAll}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                // Prevent the dialog from auto-closing before the request
+                // finishes so we can show an error if it fails.
+                e.preventDefault();
+                void handleRevokeAllOthers();
+              }}
+              disabled={revokingAll}
+              data-testid="recent-activity-revoke-all-confirm"
+            >
+              {revokingAll ? "Signing out…" : "Sign out other devices"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

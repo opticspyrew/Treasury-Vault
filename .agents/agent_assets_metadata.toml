@@ -2,7 +2,7 @@ uploads = []
 generated = []
 
 [[outputs]]
-id = "rVsXbqNF12ufq4Aoy_ggm"
-uri = "file://exports/tari-bach-invoice-INV-2026-05-3194.pdf"
-type = "pdf"
-title = "Tari Bach — Invoice INV-2026-05-3194 ($3,983.68)"
+id = "iWnoGNHQumwlhqIXpxJi6"
+uri = "file://.local/netspy-production-webhook-secret.txt"
+type = "text"
+title = "Production webhook secret — open this and copy the line inside"

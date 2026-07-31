@@ -6,7 +6,10 @@ import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { sendAdminEmail, sendUserEmail, newClientEmail, newServiceRequestEmail, kycApprovedEmail, kycRejectedEmail, paymentConfirmationDecisionEmail } from "../lib/email";
 import { logger } from "../lib/logger";
 import { createAdminSession, validateAdminSession, deleteAdminSession } from "../lib/admin-sessions";
-import { clearLoginFailures } from "../lib/login-throttle";
+import { clearLoginFailures, getAccountThrottleStatus } from "../lib/login-throttle";
+import { resolveNotificationPreferences } from "../lib/notification-preferences";
+import { enqueueOutboundStatusSync } from "../lib/manus/outbound-hooks";
+import { caseReference } from "../lib/manus/case-reference";
 
 const router = Router();
 
@@ -48,13 +51,13 @@ function safeCredentialsMatch(
 }
 
 import { ObjectStorageService } from "../lib/objectStorage";
+import { SUPPORT_EMAIL } from "../lib/support-email";
 
-// Support address shown in KYC decision emails. Kept in sync with the address
-// used by other user-facing notifications (see auth.ts SUPPORT_EMAIL).
-const KYC_SUPPORT_EMAIL = "Opticspycrew@gmail.com";
-// Same address is reused for payment-confirmation decision emails so users
-// have a consistent contact across notification types.
-const PAYMENT_SUPPORT_EMAIL = KYC_SUPPORT_EMAIL;
+// Support address shown in KYC and payment-confirmation decision emails.
+// Resolved from the shared support-email helper so every notification type
+// uses one consistent contact address.
+const KYC_SUPPORT_EMAIL = SUPPORT_EMAIL;
+const PAYMENT_SUPPORT_EMAIL = SUPPORT_EMAIL;
 
 // Build a link back to the user-facing dashboard for KYC decision emails.
 // The KYC modal is opened from the main dashboard, so the same URL works for
@@ -292,6 +295,7 @@ router.post("/requests", requireAdmin, async (req: Request, res: Response): Prom
     await db.insert(adminActivityLog).values({
       eventType: "service_request_submitted",
       clientId: client.id,
+      serviceRequestId: request.id,
       description: `${type ?? "withdrawal"} request submitted by ${client.name}: ${currency ?? "USD"} ${amount ?? "N/A"}`,
       metadata: { type, amount, currency },
     });
@@ -327,9 +331,21 @@ router.patch("/requests/:id", requireAdmin, async (req: Request, res: Response):
     await db.insert(adminActivityLog).values({
       eventType: "request_status_changed",
       clientId: request.clientId,
+      serviceRequestId: request.id,
       description: `${request.type} request from ${client?.name ?? "unknown"} ${status}`,
       metadata: { status, requestId: id },
     });
+
+    // Best-effort push of the status change to Netspy for recovery cases. Inert
+    // unless outbound sync is enabled and configured; never blocks the response.
+    if (status && request.type === "recovery_case") {
+      enqueueOutboundStatusSync({
+        caseId: request.id,
+        reference: caseReference(request.id, request.createdAt as Date),
+        status,
+        manusCaseId: request.manusCaseId ?? null,
+      });
+    }
 
     // Notify the customer by email when a payment confirmation request is
     // decided so they don't have to keep the invoice page open. Email failures
@@ -390,7 +406,44 @@ router.get("/users", requireAdmin, async (req: Request, res: Response): Promise<
       })
       .from(users)
       .orderBy(desc(users.createdAt));
-    res.json({ users: allUsers });
+
+    // Augment each user with their current sign-in throttle status so the
+    // Users page can show "Locked — Xm left" without a second round-trip.
+    // Throttle keys are normalized (trim + lowercase) to match the bucket
+    // written by the login route.
+    const now = Date.now();
+    const withLockout = await Promise.all(
+      allUsers.map(async (u) => {
+        const key = u.email.trim().toLowerCase();
+        const status = await getAccountThrottleStatus(key, now);
+        return {
+          ...u,
+          loginThrottle: {
+            failureCount: status.failureCount,
+            locked: status.locked,
+            retryAfterMs: status.retryAfterMs,
+            maxFailures: status.maxFailures,
+          },
+        };
+      }),
+    );
+
+    // Surface locked accounts at the top of the list so support can
+    // triage them at a glance. Within each group (locked / not locked)
+    // the original "newest registration first" order is preserved.
+    const sorted = [...withLockout].sort((a, b) => {
+      const aLocked = a.loginThrottle.locked ? 1 : 0;
+      const bLocked = b.loginThrottle.locked ? 1 : 0;
+      if (aLocked !== bLocked) return bLocked - aLocked;
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    });
+
+    const lockedCount = sorted.reduce(
+      (n, u) => n + (u.loginThrottle.locked ? 1 : 0),
+      0,
+    );
+
+    res.json({ users: sorted, lockedCount });
   } catch (err) {
     logger.error({ err }, "Failed to load users");
     res.status(500).json({ error: "Failed to load users" });
@@ -496,7 +549,7 @@ router.post("/users/:id/unlock-login", requireAdmin, async (req: Request, res: R
     // at sign-in time (lowercased). Match that here so the clear actually
     // hits the same bucket.
     const key = user.email.trim().toLowerCase();
-    clearLoginFailures(key);
+    await clearLoginFailures(key);
 
     await db.insert(adminActivityLog).values({
       eventType: "user_login_unlocked",
@@ -853,11 +906,18 @@ async function decideKyc(req: Request, res: Response, decision: "approved" | "re
     // decision itself — log and move on.
     try {
       const [recipient] = await db
-        .select({ name: users.name, email: users.email })
+        .select({
+          name: users.name,
+          email: users.email,
+          notificationPreferences: users.notificationPreferences,
+        })
         .from(users)
         .where(eq(users.id, submission.userId))
         .limit(1);
-      if (recipient?.email) {
+      const wantsKycEmail =
+        !!recipient &&
+        resolveNotificationPreferences(recipient.notificationPreferences).kycDecisions;
+      if (recipient?.email && wantsKycEmail) {
         const appUrl = buildAdminAppUrl(req);
         const built = decision === "approved"
           ? kycApprovedEmail({

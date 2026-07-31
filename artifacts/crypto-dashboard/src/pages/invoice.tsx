@@ -267,7 +267,7 @@ export default function Invoice() {
 
   function handlePrintInvoice() {
     const eName = escapeHtml(user?.name ?? "Account Holder");
-    const eEmail = escapeHtml(user?.email ?? "CryptoVault Member");
+    const eEmail = escapeHtml(user?.email ?? "Treasury Vault Member");
     const eInvNum = escapeHtml(invoiceNumber);
     const eRefId = escapeHtml(referenceId);
     const eDueDate = escapeHtml(dueDate);
@@ -284,7 +284,7 @@ export default function Invoice() {
               ${networkConfigured
                 ? `<p style="font-family:monospace;font-size:12px;color:#374151;margin:0 0 4px;word-break:break-all;">${escapeHtml(selectedNetwork.address)}</p>
               <p style="color:#dc2626;font-size:11px;margin:0;">&#x26A0; Send only ${escapeHtml(selectedCoin)} via the ${escapeHtml(selectedNetwork.network)} network. Sending to the wrong network may result in permanent loss of funds.</p>`
-                : `<p style="color:#92400e;font-size:12px;margin:0;">&#x26A0; Wallet address not yet configured. Please contact support at billing@cryptovault.io for payment instructions.</p>`}
+                : `<p style="color:#92400e;font-size:12px;margin:0;">&#x26A0; Wallet address not yet configured. Please contact support at billing@treasuryvault.io for payment instructions.</p>`}
             </div>
           </div>
         </div>`
@@ -332,11 +332,11 @@ export default function Invoice() {
 <body>
 <div class="header">
   <div class="logo">
-    <div class="logo-icon">C</div>
+    <div class="logo-icon">TV</div>
     <div>
-      <div class="company-name">CryptoVault</div>
+      <div class="company-name">Treasury Vault</div>
       <div class="company-sub">Digital Asset Platform</div>
-      <div class="company-addr">100 Wall Street, Suite 2100<br>New York, NY 10005<br>billing@cryptovault.io</div>
+      <div class="company-addr">100 Wall Street, Suite 2100<br>New York, NY 10005<br>billing@treasuryvault.io</div>
     </div>
   </div>
   <div class="invoice-meta">
@@ -388,7 +388,7 @@ export default function Invoice() {
 </div>
 ${paymentSection}
 <div class="footer">
-  <span>&copy; 2026 CryptoVault &mdash; Reg. No: CV-2019-88421 &middot; FinCEN Licensed MSB &middot; SEC Registered</span>
+  <span>&copy; 2026 Treasury Vault &mdash; Reg. No: TV-2019-88421 &middot; FinCEN Licensed MSB &middot; SEC Registered</span>
   <span>Ref: ${eInvNum}</span>
 </div>
 </body>
@@ -420,7 +420,7 @@ ${paymentSection}
     const warningSection = selectedNetwork
       ? (receiptNetworkConfigured
           ? `<div class="warning">&#x26A0; Ensure you are sending <strong>${escapeHtml(selectedCoin)}</strong> only via the <strong>${escapeHtml(selectedNetwork.network)}</strong> network. Sending to the wrong network will result in permanent loss of funds.</div>`
-          : `<div class="warning">&#x26A0; Wallet address for ${escapeHtml(selectedCoin)} via ${escapeHtml(selectedNetwork.network)} is not yet configured. Please contact support at billing@cryptovault.io for payment instructions.</div>`)
+          : `<div class="warning">&#x26A0; Wallet address for ${escapeHtml(selectedCoin)} via ${escapeHtml(selectedNetwork.network)} is not yet configured. Please contact support at billing@treasuryvault.io for payment instructions.</div>`)
       : "";
 
     const win = window.open("", "_blank", "width=700,height=600");
@@ -454,8 +454,8 @@ ${paymentSection}
 </head>
 <body>
 <div class="header">
-  <div><div class="logo-icon">C</div></div>
-  <div class="brand">CryptoVault</div>
+  <div><div class="logo-icon">TV</div></div>
+  <div class="brand">Treasury Vault</div>
   <div class="brand-sub">Digital Asset Platform</div>
   <h1>RECEIPT</h1>
   <div class="receipt-id">Receipt #REC-${eReceiptNum}</div>
@@ -478,10 +478,10 @@ ${walletQr}
 <div class="row"><span class="row-label">Transaction Status</span><span class="row-val"><span class="status">Under Investigation</span></span></div>
 ${warningSection}
 <div class="footer">
-  <p>CryptoVault &middot; 100 Wall Street, Suite 2100, New York, NY 10005</p>
-  <p>billing@cryptovault.io &middot; +1 (800) 555-CRYPTO</p>
-  <p>Reg. No: CV-2019-88421 &middot; FinCEN Licensed MSB &middot; SEC Registered</p>
-  <p style="margin-top:8px;color:#d1d5db">&copy; 2026 CryptoVault. All rights reserved.</p>
+  <p>Treasury Vault &middot; 100 Wall Street, Suite 2100, New York, NY 10005</p>
+  <p>billing@treasuryvault.io &middot; +1 (800) 555-CRYPTO</p>
+  <p>Reg. No: TV-2019-88421 &middot; FinCEN Licensed MSB &middot; SEC Registered</p>
+  <p style="margin-top:8px;color:#d1d5db">&copy; 2026 Treasury Vault. All rights reserved.</p>
 </div>
 </body>
 </html>`);
@@ -555,7 +555,7 @@ ${warningSection}
                 {confirmState === "approved"
                   ? "You can continue to the next step at any time."
                   : confirmState === "denied"
-                    ? "Please review your details and try again, or contact billing@cryptovault.io for help."
+                    ? "Please review your details and try again, or contact billing@treasuryvault.io for help."
                     : "Stay on this page — the badge will update automatically once an admin reviews the request."}
               </p>
             </div>
@@ -623,10 +623,10 @@ ${warningSection}
                 <div>
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center shadow-lg">
-                      <span className="text-white font-bold text-xl">C</span>
+                      <span className="text-white font-bold text-xl">TV</span>
                     </div>
                     <div>
-                      <h1 className="text-2xl font-bold text-white">CryptoVault</h1>
+                      <h1 className="text-2xl font-bold text-white">Treasury Vault</h1>
                       <p className="text-emerald-400 text-xs font-medium tracking-wide uppercase">Digital Asset Platform</p>
                     </div>
                   </div>
@@ -634,7 +634,7 @@ ${warningSection}
                     <p>100 Wall Street, Suite 2100</p>
                     <p>New York, NY 10005</p>
                     <p>United States</p>
-                    <p>billing@cryptovault.io</p>
+                    <p>billing@treasuryvault.io</p>
                     <p>+1 (800) 555-CRYPTO</p>
                   </div>
                 </div>
@@ -668,7 +668,7 @@ ${warningSection}
                 <div>
                   <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest mb-3">Bill To</p>
                   <p className="text-white font-semibold text-base">Account Holder</p>
-                  <p className="text-slate-400 text-sm">CryptoVault Member</p>
+                  <p className="text-slate-400 text-sm">Treasury Vault Member</p>
                   <p className="text-slate-400 text-sm">Account ID: CVP-2026-7748821</p>
                   <p className="text-slate-400 text-sm">Verified KYC Level 3</p>
                 </div>
@@ -862,7 +862,7 @@ ${warningSection}
                 <div>
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Contact & Support</p>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    For billing inquiries, contact our compliance team at billing@cryptovault.io or call +1 (800) 555-CRYPTO. Reference your invoice number {invoiceNumber} in all communications.
+                    For billing inquiries, contact our compliance team at billing@treasuryvault.io or call +1 (800) 555-CRYPTO. Reference your invoice number {invoiceNumber} in all communications.
                   </p>
                 </div>
               </div>
@@ -870,9 +870,9 @@ ${warningSection}
               <div className="mt-6 pt-6 border-t border-[#1e2738] flex flex-col md:flex-row items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 rounded-lg bg-emerald-500 flex items-center justify-center">
-                    <span className="text-white font-bold text-xs">C</span>
+                    <span className="text-white font-bold text-xs">TV</span>
                   </div>
-                  <span className="text-sm font-semibold text-white">CryptoVault</span>
+                  <span className="text-sm font-semibold text-white">Treasury Vault</span>
                   <span className="text-slate-500 text-xs">© 2026 All rights reserved.</span>
                 </div>
                 <div className="flex items-center gap-4 text-xs text-slate-500">

@@ -4,6 +4,7 @@ import DashboardLayout from "@/components/dashboard-layout";
 import { useAuth } from "@/lib/auth-context";
 import { getPasswordStrengthHint, validatePassword } from "@/lib/password-policy";
 import PasswordInput from "@/components/password-input";
+import PasswordRulesChecklist from "@/components/password-rules-checklist";
 
 export default function ChangePassword() {
   const [, navigate] = useLocation();
@@ -86,10 +87,14 @@ export default function ChangePassword() {
                 onChange={(e) => setForm((f) => ({ ...f, next: e.target.value }))}
                 placeholder="Min. 8 chars, mix letters & numbers"
                 className="px-4 py-2.5 bg-muted border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm transition-all"
-                aria-describedby="change-password-strength-hint"
+                aria-describedby="change-password-rules change-password-strength-hint"
                 data-testid="change-password-new"
               />
-              {strengthHint ? (
+              <PasswordRulesChecklist
+                id="change-password-rules"
+                password={form.next}
+              />
+              {strengthHint && (
                 <p
                   id="change-password-strength-hint"
                   data-testid="change-password-strength-hint"
@@ -103,13 +108,6 @@ export default function ChangePassword() {
                   }
                 >
                   {strengthHint.message}
-                </p>
-              ) : (
-                <p
-                  id="change-password-strength-hint"
-                  className="mt-1.5 text-xs text-muted-foreground"
-                >
-                  Use 8+ characters and mix letters with numbers or symbols.
                 </p>
               )}
             </div>

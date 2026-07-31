@@ -12,6 +12,8 @@ interface User {
   email: string;
   name: string;
   avatar?: string;
+  /** True when the server has confirmed the user's admin_clients status is approved/active. */
+  portalAccess?: boolean;
 }
 
 interface StoredSession {
@@ -22,10 +24,13 @@ interface StoredSession {
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
+  /** True when this user is allowed to enter the Recovery Portal. */
+  portalAccess: boolean;
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string, initialBalanceUsd?: number, scammedVia?: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  setPassword: (newPassword: string) => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
   resetPasswordWithToken: (token: string, newPassword: string) => Promise<void>;
   accountExists: (email: string) => Promise<boolean>;
@@ -38,7 +43,7 @@ const SESSION_KEY = "cryptovault.session";
 const LEGACY_ACCOUNTS_KEY = "cryptovault.accounts";
 
 function toUser(apiUser: AuthUser): User {
-  return { email: apiUser.email, name: apiUser.name };
+  return { email: apiUser.email, name: apiUser.name, portalAccess: apiUser.portalAccess ?? false };
 }
 
 function loadStoredSession(): StoredSession | null {
@@ -89,8 +94,39 @@ function clearLegacyAccounts() {
   }
 }
 
+function readOidcHandoffToken(): string | null {
+  // Accepts either `#replit_token=...` (Replit OIDC) or `#social_token=...`
+  // (Google/Apple). Both flows hand the SPA a brand-new session token via
+  // the URL fragment so it never hits the server logs.
+  if (typeof window === "undefined") return null;
+  const hash = window.location.hash;
+  if (!hash) return null;
+  if (!hash.includes("replit_token=") && !hash.includes("social_token=")) return null;
+  try {
+    const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+    const token = params.get("social_token") ?? params.get("replit_token");
+    if (token) {
+      // Strip the token from the URL so it doesn't sit in browser history.
+      const url = `${window.location.pathname}${window.location.search}`;
+      window.history.replaceState(null, "", url);
+      return token;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const initial = loadStoredSession();
+  const handoffToken = readOidcHandoffToken();
+  const stored = loadStoredSession();
+  // When the user just came back from the Replit OIDC callback we don't yet
+  // know their email/name (those come from /auth/me below). Seed the session
+  // with a placeholder so isAuthenticated flips to true immediately and the
+  // ProtectedRoute lands them on the dashboard instead of bouncing to /sign-in.
+  const initial: StoredSession | null = handoffToken
+    ? { token: handoffToken, user: stored?.user ?? { email: "", name: "" } }
+    : stored;
   const [session, setSessionState] = useState<StoredSession | null>(initial);
   const tokenRef = useRef<string | null>(initial?.token ?? null);
 
@@ -130,6 +166,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Keep multiple tabs in sync: the browser fires a "storage" event in every
+    // OTHER tab of this origin when localStorage changes. When the session key
+    // is written or removed elsewhere (login, signup, logout), adopt the new
+    // value here so this tab reflects the change without a manual refresh.
+    // We update state directly instead of via updateSession() to avoid
+    // re-writing storage (which could loop) — the originating tab already did.
+    if (typeof window === "undefined") return;
+    const onStorage = (event: StorageEvent) => {
+      // A null key means the whole store was cleared; otherwise only react to
+      // changes to our session key.
+      if (event.key !== null && event.key !== SESSION_KEY) return;
+      const next = loadStoredSession();
+      tokenRef.current = next?.token ?? null;
+      setSessionState(next);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -188,6 +244,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await authApi.changePassword(token, { currentPassword, newPassword });
   };
 
+  const setPassword = async (newPassword: string) => {
+    const token = tokenRef.current;
+    if (!token) {
+      throw new Error("You must be signed in to set a password.");
+    }
+
+    const passwordCheck = validatePassword(newPassword);
+    if (!passwordCheck.ok) {
+      throw new Error(passwordCheck.error ?? "Please choose a stronger password.");
+    }
+
+    await authApi.setPassword(token, { newPassword });
+  };
+
   const accountExists = async (email: string): Promise<boolean> => {
     const trimmed = email.trim();
     if (!trimmed) return false;
@@ -242,10 +312,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user: session?.user ?? null,
         isAuthenticated: !!session,
+        portalAccess: session?.user?.portalAccess === true,
         token: session?.token ?? null,
         login,
         signup,
         changePassword,
+        setPassword,
         forgotPassword,
         resetPasswordWithToken,
         accountExists,

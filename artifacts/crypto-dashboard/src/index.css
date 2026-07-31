@@ -220,3 +220,199 @@
     inset: -1px;
   }
 }
+
+/* =====================================================================
+   REFUNDS.SITE — namespaced theme. All tokens scoped to `.refunds-scope`
+   so the CryptoVault visual identity is never touched. Components inside
+   reuse the same Tailwind utility names (bg-primary, bg-card, etc.) but
+   resolve to the cyber-intelligence palette via CSS custom properties.
+   ===================================================================== */
+
+.refunds-scope {
+  --background: 220 60% 5%;
+  --foreground: 195 25% 96%;
+  --border: 215 30% 16%;
+
+  --card: 222 45% 8%;
+  --card-foreground: 195 25% 96%;
+  --card-border: 200 30% 20%;
+
+  --sidebar: 222 60% 4%;
+  --sidebar-foreground: 195 25% 90%;
+  --sidebar-border: 215 30% 12%;
+  --sidebar-primary: 180 95% 50%;
+  --sidebar-primary-foreground: 222 60% 5%;
+  --sidebar-accent: 215 30% 12%;
+  --sidebar-accent-foreground: 195 25% 90%;
+  --sidebar-ring: 180 95% 50%;
+
+  --popover: 222 45% 8%;
+  --popover-foreground: 195 25% 96%;
+  --popover-border: 200 30% 20%;
+
+  --primary: 180 95% 50%;
+  --primary-foreground: 222 60% 5%;
+  --secondary: 215 30% 14%;
+  --secondary-foreground: 195 25% 90%;
+  --muted: 215 30% 10%;
+  --muted-foreground: 215 15% 62%;
+  --accent: 217 91% 60%;
+  --accent-foreground: 222 60% 5%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --input: 215 30% 18%;
+  --ring: 180 95% 50%;
+
+  --chart-1: 180 95% 50%;
+  --chart-2: 217 91% 60%;
+  --chart-3: 152 70% 45%;
+  --chart-4: 38 95% 55%;
+  --chart-5: 0 84% 60%;
+
+  --app-font-sans: 'IBM Plex Sans', 'Inter', system-ui, sans-serif;
+  --app-font-mono: 'JetBrains Mono', 'IBM Plex Mono', Menlo, monospace;
+
+  --refunds-trust: 217 91% 60%;
+  --refunds-alert: 38 95% 55%;
+  --refunds-success: 152 70% 45%;
+  --refunds-danger: 0 84% 60%;
+  --refunds-vault: 220 70% 9%;
+  --refunds-grid: 215 30% 22%;
+
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--app-font-sans);
+  min-height: 100%;
+}
+
+.refunds-scope .font-mono,
+.refunds-scope code,
+.refunds-scope pre {
+  font-family: var(--app-font-mono);
+}
+
+@layer utilities {
+  .refunds-glass {
+    background:
+      linear-gradient(135deg, hsla(var(--card) / 0.75), hsla(var(--card) / 0.4));
+    border: 1px solid hsla(var(--card-border) / 0.7);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+  }
+  .refunds-glass-soft {
+    background:
+      linear-gradient(135deg, hsla(var(--card) / 0.55), hsla(var(--card) / 0.25));
+    border: 1px solid hsla(var(--card-border) / 0.45);
+    backdrop-filter: blur(10px) saturate(130%);
+    -webkit-backdrop-filter: blur(10px) saturate(130%);
+  }
+  .refunds-grid-bg {
+    background-image:
+      linear-gradient(hsla(var(--refunds-grid) / 0.18) 1px, transparent 1px),
+      linear-gradient(90deg, hsla(var(--refunds-grid) / 0.18) 1px, transparent 1px);
+    background-size: 36px 36px;
+  }
+  .refunds-radial {
+    background:
+      radial-gradient(60% 55% at 50% 0%, hsla(var(--primary) / 0.14), transparent 70%),
+      radial-gradient(45% 35% at 85% 90%, hsla(var(--accent) / 0.10), transparent 70%),
+      hsl(var(--background));
+  }
+  .refunds-vault-bg {
+    background:
+      radial-gradient(50% 60% at 50% 0%, hsla(var(--primary) / 0.10), transparent 70%),
+      linear-gradient(180deg, hsl(var(--refunds-vault)), hsl(var(--background)));
+  }
+  .refunds-divider {
+    background: linear-gradient(90deg,
+      transparent,
+      hsla(var(--primary) / 0.4),
+      hsla(var(--accent) / 0.4),
+      transparent);
+    height: 1px;
+  }
+}
+
+@keyframes refunds-scan {
+  0%   { transform: translateY(-110%); opacity: 0; }
+  10%  { opacity: 0.7; }
+  100% { transform: translateY(120%); opacity: 0; }
+}
+.refunds-scan-line {
+  position: relative;
+  overflow: hidden;
+}
+.refunds-scan-line::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 30%;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, hsla(var(--primary) / 0.20), transparent);
+  animation: refunds-scan 7s linear infinite;
+}
+
+@keyframes refunds-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 hsla(var(--primary) / 0.45); }
+  70%  { box-shadow: 0 0 0 10px hsla(var(--primary) / 0); }
+  100% { box-shadow: 0 0 0 0 hsla(var(--primary) / 0); }
+}
+.refunds-pulse-ring { animation: refunds-pulse-ring 2.4s ease-out infinite; }
+
+@keyframes refunds-pulse-alert {
+  0%, 100% { box-shadow: 0 0 0 0 hsla(var(--refunds-alert) / 0.50); }
+  50%      { box-shadow: 0 0 0 8px hsla(var(--refunds-alert) / 0); }
+}
+.refunds-pulse-alert { animation: refunds-pulse-alert 1.8s ease-out infinite; }
+
+@keyframes refunds-vault-lock {
+  0%   { transform: translateY(0) scale(1); }
+  35%  { transform: translateY(-2px) scale(1.04); }
+  60%  { transform: translateY(-2px) scale(1.04); }
+  100% { transform: translateY(0) scale(1); }
+}
+.refunds-vault-lock { animation: refunds-vault-lock 1.5s ease-in-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .refunds-scan-line::after,
+  .refunds-pulse-ring,
+  .refunds-pulse-alert,
+  .refunds-vault-lock {
+    animation: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Print — forensic report export ("Save as PDF").
+   Gated on the `refunds-printing` body class, which the Report Generation
+   section toggles only while printing. This keeps the rule fully isolated:
+   printing any other surface (including the CryptoVault dashboard) is
+   unaffected because the class is never present there.
+--------------------------------------------------------------------------- */
+@media print {
+  body.refunds-printing * {
+    visibility: hidden !important;
+  }
+  body.refunds-printing .refunds-print-report,
+  body.refunds-printing .refunds-print-report * {
+    visibility: visible !important;
+    color: #0a0a0a !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-color: #d1d5db !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  body.refunds-printing .refunds-print-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0 24px;
+  }
+  body.refunds-printing .refunds-print-hide {
+    display: none !important;
+  }
+}

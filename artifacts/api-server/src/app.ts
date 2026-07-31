@@ -55,7 +55,18 @@ app.use(
 );
 app.use(cors());
 // 12mb limit accommodates KYC ID photo uploads (base64-encoded, up to ~8MB raw).
-app.use(express.json({ limit: "12mb" }));
+// The `verify` hook stashes the exact raw body bytes on `req.rawBody` before
+// JSON parsing. The Manus /sync/* signature check and the Netspy webhook
+// receiver verify HMAC signatures over these raw bytes — a re-serialized body
+// could change whitespace/key order and break an otherwise-valid signature.
+app.use(
+  express.json({
+    limit: "12mb",
+    verify: (req, _res, buf) => {
+      (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true, limit: "12mb" }));
 
 app.use("/api", router);

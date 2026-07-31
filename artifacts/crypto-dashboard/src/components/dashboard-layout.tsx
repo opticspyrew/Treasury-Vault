@@ -64,8 +64,8 @@ const navItems = [
 
 export default function DashboardLayout({ children, activeTab }: LayoutProps) {
   const [, navigate] = useLocation();
-  const { user, logout } = useAuth();
-  const { currency, setCurrency } = useCurrency();
+  const { user, logout, portalAccess } = useAuth();
+  const { currency, setCurrency, btcPriceUsd, ratesLoading } = useCurrency();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -91,11 +91,12 @@ export default function DashboardLayout({ children, activeTab }: LayoutProps) {
         }`}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 p-6 border-b border-sidebar-border">
-          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
-            <span className="text-primary-foreground font-bold text-base">C</span>
-          </div>
-          <span className="text-lg font-bold text-foreground">CryptoVault</span>
+        <div className="flex items-center px-4 py-3 border-b border-sidebar-border">
+          <img
+            src="/treasury-vault-logo.jpg"
+            alt="Treasury Vault"
+            className="h-10 w-auto rounded-lg bg-white object-contain"
+          />
         </div>
 
         {/* Nav */}
@@ -119,6 +120,31 @@ export default function DashboardLayout({ children, activeTab }: LayoutProps) {
               )}
             </button>
           ))}
+
+          {/* Refunds Portal — only visible to approved/active clients */}
+          {portalAccess && (
+            <div className="mt-3 pt-3 border-t border-sidebar-border">
+              <button
+                type="button"
+                onClick={() => { navigate("/refunds"); setSidebarOpen(false); }}
+                data-testid="nav-refunds-portal"
+                className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-primary/25 bg-primary/[0.06] hover:bg-primary/10 hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all"
+              >
+                <span className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center text-primary flex-shrink-0">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                </span>
+                <span className="flex-1 text-left min-w-0">
+                  <span className="block text-sm font-semibold text-foreground">Refunds Portal</span>
+                  <span className="block text-[11px] text-muted-foreground truncate">Crypto asset recovery</span>
+                </span>
+                <svg className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          )}
         </nav>
 
         {/* User section */}
@@ -158,6 +184,32 @@ export default function DashboardLayout({ children, activeTab }: LayoutProps) {
                   Change password
                 </button>
                 <button
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    navigate("/connected-accounts");
+                  }}
+                  data-testid="user-menu-connected-accounts"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors border-b border-card-border"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 015.656 0l1.414 1.414a4 4 0 010 5.656l-2.828 2.828a4 4 0 01-5.656 0l-1.414-1.414M10.172 13.828a4 4 0 01-5.656 0L3.1 12.414a4 4 0 010-5.656l2.828-2.828a4 4 0 015.656 0l1.414 1.414" />
+                  </svg>
+                  Connected accounts
+                </button>
+                <button
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    navigate("/notification-settings");
+                  }}
+                  data-testid="user-menu-notification-settings"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors border-b border-card-border"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  Notification preferences
+                </button>
+                <button
                   onClick={handleLogout}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-destructive hover:bg-muted transition-colors"
                 >
@@ -186,6 +238,26 @@ export default function DashboardLayout({ children, activeTab }: LayoutProps) {
           </button>
 
           <div className="flex items-center gap-2 ml-auto">
+            {/* Live BTC price */}
+            <div
+              data-testid="header-btc-price"
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-muted border border-card-border rounded-full"
+              title="Live BTC price (USD)"
+            >
+              <span className="w-5 h-5 rounded-full bg-amber-400 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                ₿
+              </span>
+              {btcPriceUsd > 0 ? (
+                <span className="text-xs font-semibold text-foreground tabular-nums">
+                  ${btcPriceUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                </span>
+              ) : (
+                <span className="text-xs font-medium text-muted-foreground animate-pulse">
+                  {ratesLoading ? "…" : "—"}
+                </span>
+              )}
+            </div>
+
             {/* Currency Selector */}
             <select
               value={currency.code}

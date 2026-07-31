@@ -1,0 +1,27 @@
+You are an expert full-stack engineer and system integrator working inside the Refunds.site Replit project.
+
+Goal: Transform Refunds.site into the unified frontend and core operational workspace for a combined ecosystem with Netspyworld.manus.space (Digital Investigation & Asset Recovery forensics service).
+
+Key elements from Netspyworld to integrate:
+- Digital forensics, blockchain intelligence, OSINT capabilities
+- Investigation workflow (Case Intake → Evidence Analysis → Report Generation → Legal Coordination)
+- Certifications, services pricing, knowledge base/articles
+- Professional investigator branding and evidence-driven methodology
+
+Steps to execute:
+1. Analyze the current Refunds.site codebase and structure (dashboard, portal, intake flow, AI assistant, on-chain tools).
+2. Design and implement a unified navigation and user flow: Dashboard → Investigations (new Netspy section) → Wallets/Portfolio → Recoveries → Reports → Knowledge Base.
+3. Add shared authentication and case management that links Refunds recovery dashboard features with Netspy investigation workflows (e.g., one case ID that triggers both on-chain monitoring and forensic reporting).
+4. Integrate or embed Netspy-style features: OSINT tools, evidence package generation, investigation timeline, report templates.
+5. Enhance the existing AI recovery assistant to also handle forensics queries and generate investigation reports.
+6. Update branding, landing page, and portal to reflect the combined "Netspy Refunds Ecosystem" or similar professional name.
+7. Ensure security, SOC 2-style controls, and compliance are maintained/enhanced.
+8. Provide a clear plan for data sharing/sync between the two (if Manus provides APIs or export) and prepare for deployment outside Replit if needed (e.g., export to Vercel/Render).
+
+Output:
+- Summary of changes made or planned
+- Key files modified/created
+- Next steps for full integration with the Manus side
+- Any code snippets or component examples for critical parts
+
+Start by exploring the current project files and confirming understanding.

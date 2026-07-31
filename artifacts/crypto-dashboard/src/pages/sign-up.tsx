@@ -2,8 +2,10 @@ import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { getPasswordStrengthHint, validatePassword } from "@/lib/password-policy";
+import PasswordRulesChecklist from "@/components/password-rules-checklist";
 import { ForgotPasswordPanel } from "@/components/forgot-password-panel";
 import PasswordInput from "@/components/password-input";
+import SocialAuthButtons from "@/components/social-auth-buttons";
 import TotalAssetsBanner from "@/components/total-assets-banner";
 
 export default function SignUp() {
@@ -23,6 +25,18 @@ export default function SignUp() {
   const [error, setError] = useState("");
   const [emailTakenAddress, setEmailTakenAddress] = useState("");
   const [showForgot, setShowForgot] = useState(false);
+  const [socialError] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("social_error");
+    if (code) {
+      params.delete("social_error");
+      const qs = params.toString();
+      const url = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
+      window.history.replaceState(null, "", url);
+    }
+    return code;
+  });
 
   const MAX_INITIAL_BALANCE_USD = 1_000_000;
 
@@ -116,18 +130,19 @@ export default function SignUp() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="flex gap-3 mb-10 font-extrabold justify-center items-center flex-col text-[#2193ebf0] text-[16px]">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center flex-col">
-            <span className="text-primary-foreground font-bold text-lg">C</span>
-          </div>
-          <span>CHARGE-BACK NEXUX HUB</span>
+        <div className="flex items-center justify-center mb-10">
+          <img src="/treasury-vault-logo.jpg" alt="Treasury Vault" className="h-14 w-auto rounded-xl bg-white object-contain" />
         </div>
 
         <TotalAssetsBanner />
 
         <div className="bg-card border border-card-border rounded-2xl p-8">
           <h1 className="text-2xl font-bold text-foreground mb-1">Create account</h1>
-          <p className="text-muted-foreground text-sm mb-8">Start trading crypto in minutes</p>
+          <p className="text-muted-foreground text-sm mb-6">Start trading crypto in minutes</p>
+
+          <div className="mb-5">
+            <SocialAuthButtons mode="signup" errorCode={socialError} />
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -165,9 +180,13 @@ export default function SignUp() {
                 placeholder="Min. 8 chars, mix letters & numbers"
                 autoComplete="new-password"
                 className="px-4 py-2.5 bg-muted border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm transition-all"
-                aria-describedby="password-strength-hint"
+                aria-describedby="password-rules password-strength-hint"
               />
-              {strengthHint ? (
+              <PasswordRulesChecklist
+                id="password-rules"
+                password={form.password}
+              />
+              {strengthHint && (
                 <p
                   id="password-strength-hint"
                   data-testid="password-strength-hint"
@@ -181,10 +200,6 @@ export default function SignUp() {
                   }
                 >
                   {strengthHint.message}
-                </p>
-              ) : (
-                <p id="password-strength-hint" className="mt-1.5 text-xs text-muted-foreground">
-                  Use 8+ characters and mix letters with numbers or symbols.
                 </p>
               )}
             </div>

@@ -105,6 +105,8 @@ export interface AuthUser {
   id: number;
   email: string;
   name: string;
+  /** True when the user's admin_clients record has status approved or active. */
+  portalAccess?: boolean;
 }
 
 export interface AuthSessionResponse {
@@ -208,7 +210,9 @@ export const authApi = {
     return data.user;
   },
 
-  sessions: async (token: string): Promise<AuthSessionRecord[]> => {
+  sessions: async (
+    token: string,
+  ): Promise<{ sessions: AuthSessionRecord[]; pendingWithdrawalCount: number }> => {
     const res = await fetch(`${AUTH_BASE}/sessions`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -216,9 +220,22 @@ export const authApi = {
       const err = await res.json().catch(() => ({ error: res.statusText }));
       throw new Error(err.error || "Failed to load recent activity");
     }
-    const data = (await res.json()) as { sessions: AuthSessionRecord[] };
-    return data.sessions;
+    const data = (await res.json()) as {
+      sessions: AuthSessionRecord[];
+      pendingWithdrawalCount?: number;
+    };
+    return {
+      sessions: data.sessions,
+      pendingWithdrawalCount: data.pendingWithdrawalCount ?? 0,
+    };
   },
+
+  revokeAllOtherSessions: (token: string) =>
+    post<{ revoked: number }>(
+      `${AUTH_BASE}/sessions/revoke-all-others`,
+      {},
+      { Authorization: `Bearer ${token}` },
+    ),
 
   revokeSession: async (token: string, id: number): Promise<void> => {
     const res = await fetch(`${AUTH_BASE}/sessions/${id}`, {
@@ -236,6 +253,11 @@ export const authApi = {
 
   changePassword: (token: string, data: { currentPassword: string; newPassword: string }) =>
     post<{ ok: boolean }>(`${AUTH_BASE}/change-password`, data, {
+      Authorization: `Bearer ${token}`,
+    }),
+
+  setPassword: (token: string, data: { newPassword: string }) =>
+    post<{ ok: boolean }>(`${AUTH_BASE}/set-password`, data, {
       Authorization: `Bearer ${token}`,
     }),
 
@@ -279,4 +301,83 @@ export const authApi = {
 
   resetPassword: (data: { token: string; newPassword: string }) =>
     post<AuthSessionResponse>(`${AUTH_BASE}/reset-password`, data),
+
+  getNotificationPreferences: async (token: string): Promise<NotificationPreferencesResponse> => {
+    const res = await fetch(`${AUTH_BASE}/preferences`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || "Failed to load notification preferences");
+    }
+    return res.json();
+  },
+
+  updateNotificationPreferences: (
+    token: string,
+    data: Partial<NotificationPreferences>,
+  ) =>
+    request<NotificationPreferencesResponse>(`${AUTH_BASE}/preferences`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+};
+
+export interface NotificationPreferences {
+  kycDecisions: boolean;
+  newSignIn: boolean;
+}
+
+export interface NotificationPreferencesResponse {
+  preferences: NotificationPreferences;
+  mandatory: string[];
+}
+
+// Social sign-in (Google) ---------------------------------------------------
+
+export type SocialProvider = "google";
+
+export interface ProvidersConfig {
+  google: boolean;
+}
+
+export interface LinkedProvider {
+  provider: SocialProvider;
+  email: string | null;
+  linkedAt: string;
+}
+
+export interface ProvidersLinkedResponse {
+  providers: ProvidersConfig;
+  linked: LinkedProvider[];
+  hasPassword: boolean;
+}
+
+export const socialAuthApi = {
+  publicConfig: async (): Promise<ProvidersConfig> => {
+    const res = await fetch(`${AUTH_BASE}/providers/config`);
+    if (!res.ok) return { google: false };
+    const data = (await res.json()) as { providers: ProvidersConfig };
+    return data.providers;
+  },
+  linked: async (token: string): Promise<ProvidersLinkedResponse> => {
+    const res = await fetch(`${AUTH_BASE}/providers/linked`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || "Failed to load connected accounts");
+    }
+    return res.json();
+  },
+  disconnect: (token: string, provider: SocialProvider) =>
+    post<{ ok: boolean }>(
+      `${AUTH_BASE}/providers/${provider}/disconnect`,
+      {},
+      { Authorization: `Bearer ${token}` },
+    ),
+  connectUrl: (provider: SocialProvider, token: string): string =>
+    `${AUTH_BASE}/${provider}/connect?token=${encodeURIComponent(token)}`,
+  loginUrl: (provider: SocialProvider): string => `${AUTH_BASE}/${provider}/login`,
 };

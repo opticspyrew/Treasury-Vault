@@ -9,6 +9,7 @@ import {
 } from "@/lib/login-throttle";
 import { ForgotPasswordPanel } from "@/components/forgot-password-panel";
 import PasswordInput from "@/components/password-input";
+import SocialAuthButtons from "@/components/social-auth-buttons";
 import TotalAssetsBanner from "@/components/total-assets-banner";
 
 export default function SignIn() {
@@ -28,6 +29,19 @@ export default function SignIn() {
   const [error, setError] = useState("");
   const [showForgot, setShowForgot] = useState(false);
   const [lockMsRemaining, setLockMsRemaining] = useState(0);
+  const [socialError, setSocialError] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("social_error");
+    if (code) {
+      params.delete("social_error");
+      const qs = params.toString();
+      const url = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
+      window.history.replaceState(null, "", url);
+    }
+    return code;
+  });
+  void setSocialError;
 
   useEffect(() => {
     const refresh = () => {
@@ -82,18 +96,19 @@ export default function SignIn() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-lg">C</span>
-          </div>
-          <span className="text-xl font-bold text-foreground">CryptoVault</span>
+        <div className="flex items-center mb-10">
+          <img src="/treasury-vault-logo.jpg" alt="Treasury Vault" className="h-12 w-auto rounded-xl bg-white object-contain" />
         </div>
 
         <TotalAssetsBanner />
 
         <div className="bg-card border border-card-border rounded-2xl p-8">
           <h1 className="text-2xl font-bold text-foreground mb-1">Welcome back</h1>
-          <p className="text-muted-foreground text-sm mb-8">Sign in to your account to continue</p>
+          <p className="text-muted-foreground text-sm mb-6">Sign in to your account to continue</p>
+
+          <div className="mb-5">
+            <SocialAuthButtons mode="signin" errorCode={socialError} />
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>

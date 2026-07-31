@@ -1,0 +1,57 @@
+Add a new "Refunds.site" section inside the existing crypto-dashboard app: a premium, enterprise-grade digital asset recovery and cyber intelligence brand, plus the first set of working dashboard screens wired to mock data. This Prompt 1 establishes the brand identity AND a functional UI shell so later prompts can progressively connect real backend logic (APIs, blockchain intelligence, encrypted storage, AI automation) without redesigning the frontend.
+
+The Refunds.site section must look trustworthy, secure, modern, and institutional — comparable to enterprise blockchain intelligence and cybersecurity platforms — and must not reuse the existing CryptoVault visual identity. Tone: professional, secure, forensic, intelligent, compliance-oriented. Avoid exaggerated promises, scammy wording, fake testimonials, or unrealistic guarantees.
+
+Done looks like
+
+Brand foundation
+
+A short in-repo design system reference (markdown) covering: logo direction, typography system, trust color palette, glassmorphism rules, motion/animation principles, iconography, and voice/tone guardrails.
+A live "/refunds/brand" style-guide page inside the dashboard that renders the palette, typography scale, button/input/card variants, glass surfaces, and security/vault iconography so the brand can be reviewed visually.
+Working prototype screens (mock data, fully navigable)
+
+Public landing page at /refunds — hero, capabilities, trust/compliance band, "Open Secure Portal" CTA. No fake testimonials, no guarantees.
+Auth shell at /refunds/sign-in and /refunds/sign-up — styled to the new brand; uses the existing auth wiring underneath so login still works.
+Client dashboard at /refunds/portal with a sidebar/topbar layout containing:
+Recovery Vault overview (case summary cards, recovered/at-risk balances, risk score).
+Case intake workflow (multi-step form: incident type, asset, transaction hashes, evidence upload stub, summary).
+Investigator dashboard preview (read-only panel showing assigned analyst, status timeline, next action).
+Blockchain activity widgets (tx graph stub, address risk panel, on-chain alerts feed).
+AI assistant panel (collapsible side panel with mock prompt/response thread).
+Secure messaging UI (threaded conversation view with end-to-end-encrypted badge).
+Evidence upload interface (drag-drop area, file list with hash/status, chain-of-custody log).
+Mock recovery timeline (vertical timeline of case milestones with status pills).
+Quality bar
+
+All screens are responsive (mobile, tablet, desktop), keyboard accessible, and use the new dark cyber-intelligence aesthetic with glassmorphism, subtle security-themed motion (no gimmicks).
+Every data source is a typed mock module so a future prompt can swap it for a real API by changing only the data layer.
+No regressions to the existing CryptoVault routes; their look stays unchanged.
+Out of scope
+
+Real backend endpoints, real blockchain queries, real AI calls, real encrypted storage. All data is mock.
+Real evidence file persistence (upload UI accepts files but stores them only in component state).
+Payments, KYC integration, admin tooling.
+Email/SMS notifications.
+Internationalization.
+Production-grade auth changes; the existing auth flow is reused, only restyled for the Refunds brand.
+Apple sign-in (already removed in Task #89).
+Steps
+
+Design system + brand reference — Define the Refunds.site palette (deep vault-blue/graphite base, signal accents for trust/alert/success), typography pairing (one institutional sans for UI + a monospaced face for forensic data), motion tokens, and glassmorphism surface rules. Capture them as Tailwind theme tokens plus a markdown design-system doc, and render a /refunds/brand style-guide page so they can be reviewed in the browser. Architectural note: namespace everything (refunds-* tokens / RefundsX components) so CryptoVault styles are not touched.
+Refunds shell + routing — Add a refunds/ feature folder with its own layout (sidebar + topbar), public landing page, and auth shell pages. Register routes (/refunds, /refunds/brand, /refunds/sign-in, /refunds/sign-up, /refunds/portal/*) in the existing wouter router, gating portal routes with the existing ProtectedRoute. Architectural note: route prefix is the seam — no Refunds component may be imported from existing CryptoVault pages, and vice versa.
+Mock data + domain types — Create a typed mock data layer (cases, vault balances, transactions, address risk, messages, evidence files, timeline events, AI messages) behind small read functions (getCases(), getCase(id), etc.) so a future prompt can replace the implementation with real fetch calls without touching components.
+Client portal screens — Build Recovery Vault overview, case intake workflow, investigator preview, blockchain activity widgets, AI assistant panel, secure messaging UI, evidence upload UI, and the recovery timeline as composable components inside the Refunds layout, all consuming the mock data layer. Ensure responsive behavior and basic keyboard accessibility.
+Polish + verification — Add subtle, tasteful security-themed animations (scan lines, vault-lock transitions, soft pulse on alerts) using existing animation libs; verify dark theme across all screens; run the dashboard tests and confirm no existing CryptoVault tests regressed; smoke-test every new route in the preview.
+Relevant files
+
+artifacts/crypto-dashboard/src/App.tsx
+artifacts/crypto-dashboard/src/main.tsx
+artifacts/crypto-dashboard/src/index.css
+artifacts/crypto-dashboard/src/components/dashboard-layout.tsx
+artifacts/crypto-dashboard/src/components/ui
+artifacts/crypto-dashboard/src/pages/sign-in.tsx
+artifacts/crypto-dashboard/src/pages/sign-up.tsx
+artifacts/crypto-dashboard/src/pages/dashboard.tsx
+artifacts/crypto-dashboard/src/lib
+artifacts/crypto-dashboard/src/hooks
+artifacts/crypto-dashboard/package.json
