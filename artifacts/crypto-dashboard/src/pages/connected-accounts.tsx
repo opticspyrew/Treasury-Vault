@@ -16,7 +16,7 @@ const STATUS_MESSAGES: Record<string, { kind: "success" | "error"; text: string 
   exchange_failed: { kind: "error", text: "We couldn't verify your sign-in with the provider." },
   email_unverified: { kind: "error", text: "That provider account has no verified email." },
   already_linked: { kind: "error", text: "That account is already connected." },
-  in_use_elsewhere: { kind: "error", text: "That provider account is connected to a different Treasury Vault user." },
+  in_use_elsewhere: { kind: "error", text: "That provider account is connected to a different CryptoVault user." },
   google_not_configured: { kind: "error", text: "Google sign-in isn't available right now." },
   start_failed: { kind: "error", text: "We couldn't start the link flow. Please try again." },
 };

@@ -1,13 +1,7 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import HeroSection from "../hero-section";
 import { installIntersectionObserverStub } from "./test-utils";
-
-// HeroSection uses useAuth to decide button label/route; stub it with the
-// unauthenticated default so the test doesn't require a full AuthProvider.
-vi.mock("@/lib/auth-context", () => ({
-  useAuth: () => ({ isAuthenticated: false, portalAccess: false }),
-}));
 
 beforeAll(installIntersectionObserverStub);
 afterEach(cleanup);
