@@ -154,8 +154,9 @@ test("cases.getUnified coerces a numeric-string id to a number in the wire input
 
 test("cases.getUnified rejects non-finite ids locally without calling fetch", async () => {
   mockFetch(TRPC_OK({}));
-  // Note: "" is NOT here — Number("") is 0, which is finite and passes through.
-  for (const bad of ["abc", NaN, Infinity, "12abc"]) {
+  // Empty/blank strings are rejected too: Number("") is 0, which would
+  // otherwise silently query the partner as case 0.
+  for (const bad of ["abc", NaN, Infinity, "12abc", "", "   ", "\t\n"]) {
     const res = await getUnifiedCase(bad);
     assert.equal(res.ok, false);
     assert.equal(res.status, 0);

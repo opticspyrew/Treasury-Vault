@@ -199,7 +199,12 @@ export function createUnifiedCase(
 }
 
 export function getUnifiedCase(unifiedCaseId: number | string): Promise<OutboundResponse> {
-  const id = Number(unifiedCaseId);
+  // Reject empty/blank strings explicitly: Number("") is 0, which would
+  // otherwise be sent to the partner as {"unifiedCaseId":0}.
+  const id =
+    typeof unifiedCaseId === "string" && unifiedCaseId.trim() === ""
+      ? NaN
+      : Number(unifiedCaseId);
   if (!Number.isFinite(id)) {
     return Promise.resolve({
       ok: false,
