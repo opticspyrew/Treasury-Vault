@@ -59,13 +59,15 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port,
-    host: "0.0.0.0",
-    allowedHosts: true,
-    fs: {
-      strict: true,
-      deny: ["**/.*"],
+  port,
+  host: "0.0.0.0",
+  allowedHosts: true,
+  proxy: {
+    "/api": {
+      target: "http://127.0.0.1:3000",
+      changeOrigin: true,
     },
+  },
   },
   preview: {
     port,
