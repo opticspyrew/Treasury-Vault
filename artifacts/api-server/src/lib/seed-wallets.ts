@@ -30,7 +30,7 @@ export async function seedDefaultWallets(): Promise<void> {
         network: w.network,
         address: PLACEHOLDER_ADDRESS,
         label: "⚠ Admin: replace with real address",
-        isActive: true,
+        isActive: false,
         sortOrder: w.sortOrder,
       }))
     );

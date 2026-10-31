@@ -1,3 +1,4 @@
+import { isConfiguredWalletAddress } from "../lib/wallet-validation.js";
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { timingSafeEqual } from "node:crypto";
 import { db } from "@workspace/db";
@@ -636,6 +637,28 @@ router.patch("/wallet-configs/:id", requireAdmin, async (req: Request, res: Resp
       res.status(400).json({ error: "address must not be blank" });
       return;
     }
+    
+    const [existingWallet] = await db
+      .select()
+      .from(cryptoWalletConfigs)
+      .where(eq(cryptoWalletConfigs.id, id))
+      .limit(1);
+
+    if (!existingWallet) {
+      res.status(404).json({ error: "Wallet config not found" });
+      return;
+    }
+
+    const effectiveAddress = address ?? existingWallet.address;
+    const effectiveActive = isActive ?? existingWallet.isActive;
+
+    if (effectiveActive && !isConfiguredWalletAddress(effectiveAddress)) {
+      res.status(400).json({
+        error: "A configured wallet address is required before activation"
+      });
+      return;
+    }
+
     const [config] = await db.update(cryptoWalletConfigs)
       .set({
         ...(address !== undefined && { address: address.trim() }),
