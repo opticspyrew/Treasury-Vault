@@ -612,12 +612,20 @@ router.post("/wallet-configs", requireAdmin, async (req: Request, res: Response)
       res.status(400).json({ error: "symbol, network, and address are required and must not be blank" });
       return;
     }
+
+    if (isActive === true && !isConfiguredWalletAddress(trimmedAddress)) {
+      res.status(400).json({
+        error: "A configured wallet address is required before activation"
+      });
+      return;
+    }
+
     const [config] = await db.insert(cryptoWalletConfigs).values({
       symbol: symbol.trim().toUpperCase(),
       network: network.trim(),
       address: trimmedAddress,
       label: label?.trim() ?? null,
-      isActive: isActive ?? true,
+      isActive: isActive ?? false,
       sortOrder: sortOrder ?? 0,
     }).returning();
     res.status(201).json({ config });
@@ -637,7 +645,7 @@ router.patch("/wallet-configs/:id", requireAdmin, async (req: Request, res: Resp
       res.status(400).json({ error: "address must not be blank" });
       return;
     }
-    
+
     const [existingWallet] = await db
       .select()
       .from(cryptoWalletConfigs)

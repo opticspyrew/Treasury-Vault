@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { cryptoWalletConfigs } from "@workspace/db";
-import { count } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { logger } from "./logger";
 
 const DEFAULT_WALLET_STUBS = [
@@ -20,6 +20,12 @@ export const PLACEHOLDER_ADDRESS = "CONFIGURE_IN_ADMIN_DASHBOARD";
 export async function seedDefaultWallets(): Promise<void> {
   try {
     const [{ value: existing }] = await db.select({ value: count() }).from(cryptoWalletConfigs);
+
+    // Deactivate previously seeded placeholder wallets.
+    await db.update(cryptoWalletConfigs)
+      .set({ isActive: false })
+      .where(eq(cryptoWalletConfigs.address, PLACEHOLDER_ADDRESS));
+
     if (Number(existing) > 0) {
       logger.info({ existing }, "Wallet configs already seeded — skipping");
       return;
