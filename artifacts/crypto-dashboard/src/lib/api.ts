@@ -1,4 +1,4 @@
-const API_BASE = "/api";
+const API_BASE = `${(import.meta.env.VITE_API_ORIGIN || "").replace(/\/$/, "")}/api`;
 const PUBLIC_BASE = `${API_BASE}/public`;
 const AUTH_BASE = `${API_BASE}/auth`;
 
