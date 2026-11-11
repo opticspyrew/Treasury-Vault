@@ -1,3 +1,4 @@
+import { useCryptoMarkets } from "@/lib/use-crypto-markets";
 import { useState } from "react";
 import DashboardLayout from "@/components/dashboard-layout";
 import { useCurrency } from "@/lib/currency-context";
@@ -26,17 +27,34 @@ export default function Market() {
   const [sortBy, setSortBy] = useState<"rank" | "change">("rank");
   const { btcPriceUsd, ratesLoading } = useCurrency();
 
-  const livePricedData = marketData.map(c =>
-    c.symbol === "BTC" && btcPriceUsd > 0
-      ? {
-          ...c,
-          price: btcPriceUsd.toLocaleString("en-US", {
+  const { market, loading: marketLoading, error: marketError } = useCryptoMarkets();
+
+
+  const livePricedData = (market?.data ?? []).map((coin) => {
+    const change = coin.price_change_percentage_24h;
+    return {
+      rank: coin.market_cap_rank || 0,
+      name: coin.name,
+      symbol: coin.symbol.toUpperCase(),
+      price: Number.isFinite(coin.current_price)
+        ? coin.current_price.toLocaleString("en-US", {
             minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          }),
-        }
-      : c,
-  );
+            maximumFractionDigits: coin.current_price < 1 ? 6 : 2,
+          })
+        : "N/A",
+      marketCap: Number.isFinite(coin.market_cap)
+        ? (coin.market_cap / 1e9).toFixed(2) + "B"
+        : "N/A",
+      volume: Number.isFinite(coin.total_volume)
+        ? (coin.total_volume / 1e9).toFixed(2) + "B"
+        : "N/A",
+      change: typeof change === "number"
+        ? `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`
+        : "N/A",
+      up: typeof change === "number" && change >= 0,
+      supply: "N/A",
+    };
+  });
 
   const filtered = livePricedData
     .filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.symbol.toLowerCase().includes(search.toLowerCase()))
@@ -51,8 +69,71 @@ export default function Market() {
     ? `$${btcPriceUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     : null;
 
+  const trackedCoins = market?.data ?? [];
+
+  const trackedCap = trackedCoins.reduce(
+    (sum, c) => sum + (Number.isFinite(c.market_cap)
+      ? Math.max(0, c.market_cap) : 0), 0
+  );
+
+  const trackedVolume = trackedCoins.reduce(
+    (sum, c) => sum + (Number.isFinite(c.total_volume)
+      ? Math.max(0, c.total_volume) : 0), 0
+  );
+
+  const btcCap = trackedCoins.find(
+    c => c.id === "bitcoin"
+  )?.market_cap ?? 0;
+
+  const formatUsd = (value: number) =>
+    "$" + new Intl.NumberFormat("en-US", {
+      notation: "compact",
+      maximumFractionDigits: 2,
+    }).format(value);
+
+  const marketSummary = [
+    {
+      label: "Tracked Market Cap",
+      value: market && trackedCap > 0
+        ? formatUsd(trackedCap) : "—",
+      sub: "Top tracked cryptocurrencies",
+    },
+    {
+      label: "Tracked 24h Volume",
+      value: market && trackedVolume > 0
+        ? formatUsd(trackedVolume) : "—",
+      sub: "Top tracked cryptocurrencies",
+    },
+    {
+      label: "BTC Tracked Share",
+      value: market && trackedCap > 0
+        ? (btcCap / trackedCap * 100).toFixed(2) + "%"
+        : "—",
+      sub: "Share of tracked market cap",
+    },
+    {
+      label: "Coins Tracked",
+      value: market ? String(trackedCoins.length) : "—",
+      sub: "Available market coverage",
+    },
+  ];
+
+
   return (
     <DashboardLayout activeTab="market">
+      <div role="status" className="px-4 py-2 text-xs text-muted-foreground">
+        {marketLoading && !market && "Loading live market data..."}
+        {marketError && !market && "Live market data unavailable"}
+        {market && (
+          <span>
+            {market.stale ? "Cached market data" : "Market data"}
+            {" · Last updated: "}
+            {new Date(market.updatedAt).toLocaleString()}
+            {marketError ? " · Refresh unavailable" : ""}
+          </span>
+        )}
+      </div>
+
       <div className="max-w-5xl mx-auto space-y-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -78,12 +159,7 @@ export default function Market() {
 
         {/* Market summary */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            { label: "Global Market Cap", value: "$2.41T", sub: "+2.14% today" },
-            { label: "24h Volume", value: "$94.8B", sub: "Across all pairs" },
-            { label: "BTC Dominance", value: "54.3%", sub: "Market share" },
-            { label: "Active Cryptos", value: "12,400+", sub: "Listed on exchanges" },
-          ].map(stat => (
+          {marketSummary.map(stat => (
             <div key={stat.label} className="bg-card border border-card-border rounded-2xl p-4">
               <p className="text-xs text-muted-foreground mb-1">{stat.label}</p>
               <p className="text-lg font-bold text-foreground">{stat.value}</p>

@@ -27,53 +27,203 @@ const publicSubmissionLimiter = rateLimit({
   },
 });
 
-const STATIC_RATES: Record<string, number> = { USD: 1, EUR: 0.92, GBP: 0.79, BTC: 1 / 27000 };
-const CACHE_TTL_MS = 60_000;
-let ratesCache: { rates: Record<string, number>; fetchedAt: number } | null = null;
 
-router.get("/exchange-rates", async (_req: Request, res: Response): Promise<void> => {
+const CACHE_TTL_MS = 60_000;
+const RETRY_DELAY_MS = 60_000;
+
+type RateCache = {
+  rates: Record<string, number>;
+  updatedAt: Record<string, string>;
+};
+
+let ratesCache: RateCache = {
+  rates: { USD: 1 },
+  updatedAt: {},
+};
+let nextRefreshAt = 0;
+let refreshPromise: Promise<void> | null = null;
+
+async function refreshExchangeRates(): Promise<void> {
+  const results = await Promise.allSettled([
+    fetch("https://open.er-api.com/v6/latest/USD", {
+      signal: AbortSignal.timeout(8000),
+    }).then(async (response) => {
+      if (!response.ok) throw new Error(`Fiat HTTP ${response.status}`);
+      const data = await response.json();
+      if (data.result !== "success") throw new Error("Invalid fiat response");
+      return data;
+    }),
+    fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+      { signal: AbortSignal.timeout(8000) },
+    ).then(async (response) => {
+      if (!response.ok) throw new Error(`BTC HTTP ${response.status}`);
+      return response.json();
+    }),
+  ]);
+
+  const now = new Date().toISOString();
+  const rates = { ...ratesCache.rates };
+  const updatedAt = { ...ratesCache.updatedAt };
+
+  const fiat = results[0];
+  if (fiat.status === "fulfilled") {
+    const eur = fiat.value.rates?.EUR;
+    const gbp = fiat.value.rates?.GBP;
+    const timestamp = fiat.value.time_last_update_unix;
+    const fiatTime =
+      typeof timestamp === "number" && Number.isFinite(timestamp)
+        ? new Date(timestamp * 1000).toISOString()
+        : now;
+
+    if (typeof eur === "number" && Number.isFinite(eur) && eur > 0) {
+      rates.EUR = eur;
+      updatedAt.EUR = fiatTime;
+    }
+    if (typeof gbp === "number" && Number.isFinite(gbp) && gbp > 0) {
+      rates.GBP = gbp;
+      updatedAt.GBP = fiatTime;
+    }
+  } else {
+    logger.warn({ err: fiat.reason }, "Fiat rates unavailable");
+  }
+
+  const btc = results[1];
+  if (btc.status === "fulfilled") {
+    const price = btc.value?.bitcoin?.usd;
+    if (typeof price === "number" && Number.isFinite(price) && price > 0) {
+      rates.BTC = 1 / price;
+      updatedAt.BTC = now;
+    }
+  } else {
+    logger.warn({ err: btc.reason }, "BTC price unavailable");
+  }
+
+  ratesCache = { rates, updatedAt };
+  nextRefreshAt = Date.now() + (
+    results.every((result) => result.status === "fulfilled")
+      ? CACHE_TTL_MS
+      : RETRY_DELAY_MS
+  );
+}
+
+
+// Live cryptocurrency market information
+const MARKET_CACHE_MS = 60_000;
+let marketCache: {
+  data: unknown;
+  fetchedAt: number;
+} | null = null;
+
+let marketPending: Promise<void> | null = null;
+
+router.get("/crypto-markets", async (_req: Request, res: Response): Promise<void> => {
   const now = Date.now();
-  if (ratesCache && now - ratesCache.fetchedAt < CACHE_TTL_MS) {
-    res.json({ rates: ratesCache.rates, cached: true });
+
+  if (marketCache && now - marketCache.fetchedAt < MARKET_CACHE_MS) {
+    res.json({
+      data: marketCache.data,
+      updatedAt: new Date(marketCache.fetchedAt).toISOString(),
+      stale: false,
+    });
     return;
   }
 
-  const rates: Record<string, number> = { ...STATIC_RATES };
-
   try {
-    const [fiatResult, btcResult] = await Promise.allSettled([
-      fetch("https://open.er-api.com/v6/latest/USD").then(r => {
-        if (!r.ok) throw new Error(`open.er-api returned ${r.status}`);
-        return r.json();
-      }),
-      fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd").then(r => {
-        if (!r.ok) throw new Error(`coingecko returned ${r.status}`);
-        return r.json();
-      }),
-    ]);
+    if (!marketPending) {
+      marketPending = (async () => {
+        const response = await fetch(
+          "https://api.coingecko.com/api/v3/coins/markets?" +
+          new URLSearchParams({
+            vs_currency: "usd",
+            order: "market_cap_desc",
+            per_page: "50",
+            page: "1",
+            sparkline: "false",
+            price_change_percentage: "24h",
+          }),
+          { signal: AbortSignal.timeout(10000) }
+        );
 
-    if (fiatResult.status === "fulfilled") {
-      const data = fiatResult.value as { rates?: Record<string, number> };
-      if (data.rates?.EUR) rates.EUR = data.rates.EUR;
-      if (data.rates?.GBP) rates.GBP = data.rates.GBP;
-    } else {
-      logger.warn({ err: fiatResult.reason }, "Fiat rate provider unavailable, using static EUR/GBP");
+        if (!response.ok) {
+          throw new Error("Market provider returned HTTP " + response.status);
+        }
+
+        const data: unknown = await response.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+          throw new Error("Invalid market data");
+        }
+
+        marketCache = { data, fetchedAt: Date.now() };
+      })().finally(() => {
+        marketPending = null;
+      });
     }
 
-    if (btcResult.status === "fulfilled") {
-      const data = btcResult.value as { bitcoin?: { usd?: number } };
-      if (data.bitcoin?.usd && data.bitcoin.usd > 0) {
-        rates.BTC = 1 / data.bitcoin.usd;
-      }
-    } else {
-      logger.warn({ err: btcResult.reason }, "BTC rate provider unavailable, using static BTC rate");
+    await marketPending;
+
+    if (!marketCache) {
+      throw new Error("Market data unavailable");
     }
+
+    res.json({
+      data: marketCache.data,
+      updatedAt: new Date(marketCache.fetchedAt).toISOString(),
+      stale: false,
+    });
   } catch (err) {
-    logger.warn({ err }, "Failed to fetch live exchange rates, using static fallback");
+    logger.warn({ err }, "Crypto market provider unavailable");
+
+    if (marketCache) {
+      res.json({
+        data: marketCache.data,
+        updatedAt: new Date(marketCache.fetchedAt).toISOString(),
+        stale: true,
+      });
+      return;
+    }
+
+    res.status(503).json({
+      error: "Live cryptocurrency market data unavailable",
+    });
+  }
+});
+
+router.get("/exchange-rates", async (_req: Request, res: Response): Promise<void> => {
+  const now = Date.now();
+
+  if (now >= nextRefreshAt) {
+    if (!refreshPromise) {
+      refreshPromise = refreshExchangeRates()
+        .catch((err) => {
+          logger.warn({ err }, "Exchange-rate refresh failed");
+          nextRefreshAt = Date.now() + RETRY_DELAY_MS;
+        })
+        .finally(() => {
+          refreshPromise = null;
+        });
+    }
+    await refreshPromise;
   }
 
-  ratesCache = { rates, fetchedAt: now };
-  res.json({ rates, cached: false });
+  const required = ["EUR", "GBP", "BTC"];
+  const unavailable = required.filter(
+    (key) => !ratesCache.rates[key] || !ratesCache.updatedAt[key],
+  );
+  const stale = required.filter((key) => {
+    const timestamp = ratesCache.updatedAt[key];
+    return timestamp && Date.now() - Date.parse(timestamp) > CACHE_TTL_MS;
+  });
+
+  res.setHeader("Cache-Control", "no-store");
+  res.status(unavailable.length ? 503 : 200).json({
+    rates: ratesCache.rates,
+    cached: now < nextRefreshAt,
+    updatedAt: ratesCache.updatedAt,
+    stale,
+    unavailable,
+  });
 });
 
 router.post("/register", publicSubmissionLimiter, async (req: Request, res: Response): Promise<void> => {
