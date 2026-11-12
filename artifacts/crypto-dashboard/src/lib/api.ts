@@ -230,6 +230,13 @@ export const authApi = {
     };
   },
 
+  cancelPendingTransaction: (token: string, txnId: string) =>
+    post<{ ok: boolean }>(
+      `${AUTH_BASE}/transactions/${encodeURIComponent(txnId)}/cancel`,
+      {},
+      { Authorization: `Bearer ${token}` },
+    ),
+
   revokeAllOtherSessions: (token: string) =>
     post<{ revoked: number }>(
       `${AUTH_BASE}/sessions/revoke-all-others`,
