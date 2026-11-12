@@ -85,11 +85,18 @@ async function seedClient(email) {
   return id;
 }
 
-async function seedRequest(clientId, type, status) {
+async function seedRequest(clientId, type, status, txnId = null) {
   await pool.query(
-    `INSERT INTO admin_service_requests (client_id, type, status) VALUES ($1, $2, $3)`,
-    [clientId, type, status],
+    `INSERT INTO admin_service_requests (client_id, type, status, txn_id) VALUES ($1, $2, $3, $4)`,
+    [clientId, type, status, txnId],
   );
+}
+
+async function cancelRequest(token, txnId) {
+  return fetch(`${BASE}/auth/transactions/${encodeURIComponent(txnId)}/cancel`, {
+    method: "POST",
+    headers: ipHeaders({ authorization: `Bearer ${token}` }),
+  });
 }
 
 async function getPendingWithdrawalCount(token) {
@@ -103,6 +110,10 @@ async function getPendingWithdrawalCount(token) {
 
 after(async () => {
   if (createdClientIds.length > 0) {
+    await pool.query(
+      `DELETE FROM admin_activity_log WHERE client_id = ANY($1::int[])`,
+      [createdClientIds],
+    );
     await pool.query(
       `DELETE FROM admin_service_requests WHERE client_id = ANY($1::int[])`,
       [createdClientIds],
@@ -163,4 +174,46 @@ test("3) pending withdrawals belonging to a different client/email are excluded"
   await seedRequest(otherClientId, "withdrawal", "pending");
 
   assert.equal(await getPendingWithdrawalCount(token), 1);
+});
+
+test("4) cancelling an owned pending withdrawal updates the server count immediately", async () => {
+  const { email, token } = await signupUser();
+  const clientId = await seedClient(email);
+  const txnId = `txn-cancel-${rnd()}`;
+  await seedRequest(clientId, "withdrawal", "pending", txnId);
+  await seedRequest(clientId, "withdrawal", "pending", `txn-still-pending-${rnd()}`);
+
+  assert.equal(await getPendingWithdrawalCount(token), 2);
+  const response = await cancelRequest(token, txnId);
+  assert.equal(response.status, 200, "authenticated owner can cancel a pending withdrawal");
+  assert.equal((await jsonOf(response)).ok, true);
+  assert.equal(await getPendingWithdrawalCount(token), 1, "warning count drops on the server");
+  const duplicate = await cancelRequest(token, txnId);
+  assert.equal(duplicate.status, 409, "already cancelled transactions cannot be cancelled again");
+});
+
+test("5) cancelling another account's pending transaction is forbidden", async () => {
+  const owner = await signupUser();
+  const attacker = await signupUser();
+  const clientId = await seedClient(owner.email);
+  const txnId = `txn-foreign-${rnd()}`;
+  await seedRequest(clientId, "withdrawal", "pending", txnId);
+
+  const response = await cancelRequest(attacker.token, txnId);
+  assert.equal(response.status, 404, "other users cannot change the request");
+  assert.equal(await getPendingWithdrawalCount(owner.token), 1);
+});
+
+test("6) completed transactions and anonymous callers cannot cancel requests", async () => {
+  const owner = await signupUser();
+  const clientId = await seedClient(owner.email);
+  const txnId = `txn-completed-${rnd()}`;
+  await seedRequest(clientId, "withdrawal", "completed", txnId);
+
+  assert.equal((await cancelRequest(owner.token, txnId)).status, 409);
+  const anonymous = await fetch(`${BASE}/auth/transactions/${encodeURIComponent(txnId)}/cancel`, {
+    method: "POST",
+    headers: ipHeaders(),
+  });
+  assert.equal(anonymous.status, 401);
 });
