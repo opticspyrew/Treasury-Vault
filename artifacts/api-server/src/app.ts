@@ -53,7 +53,31 @@ app.use(
     },
   }),
 );
-app.use(cors());
+const allowedOrigins = new Set(
+  [
+    process.env.APP_PUBLIC_URL || "",
+    process.env.CORS_ALLOWED_ORIGINS || "",
+  ]
+    .join(",")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter(Boolean),
+);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (
+        process.env.NODE_ENV !== "production" ||
+        !origin ||
+        allowedOrigins.has(origin)
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+  }),
+);
 // 12mb limit accommodates KYC ID photo uploads (base64-encoded, up to ~8MB raw).
 // The `verify` hook stashes the exact raw body bytes on `req.rawBody` before
 // JSON parsing. The Manus /sync/* signature check and the Netspy webhook
