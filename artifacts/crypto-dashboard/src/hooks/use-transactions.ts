@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { authApi } from "@/lib/api";
 
 export type StatusType = "investigation" | "completed" | "pending" | "processing";
 
@@ -271,7 +272,9 @@ export function useTransactions() {
     return newTx.id;
   }
 
-  function cancelTransaction(id: string) {
+  async function cancelTransaction(id: string, token: string): Promise<void> {
+    // Do not erase a transaction locally unless the server confirms cancellation.
+    await authApi.cancelPendingTransaction(token, id);
     setTransactions(prev => prev.filter(tx => tx.id !== id));
   }
 
