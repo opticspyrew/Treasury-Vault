@@ -6,8 +6,9 @@ import {
   passwordResetTokens,
   adminClients,
   adminServiceRequests,
+  adminActivityLog,
 } from "@workspace/db";
-import { and, eq, isNull, gt, desc, ne, sql } from "drizzle-orm";
+import { and, eq, isNull, gt, desc, ne, sql, inArray } from "drizzle-orm";
 import {
   generateResetToken,
   hashPassword,
@@ -1003,6 +1004,67 @@ router.patch("/preferences", async (req: Request, res: Response): Promise<void> 
   } catch (err) {
     logger.error({ err }, "Failed to update notification preferences");
     res.status(500).json({ error: "Failed to update notification preferences." });
+  }
+});
+
+// Cancel only a still-pending send/withdrawal owned by the authenticated user.
+// The corresponding browser transaction must remain visible if this request fails.
+router.post("/transactions/:txnId/cancel", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const token = extractBearerToken(req);
+    const user = token ? await findUserBySessionToken(token) : null;
+    if (!user) {
+      res.status(401).json({ error: "Sign in required." });
+      return;
+    }
+
+    const txnId = String(req.params.txnId ?? "").trim();
+    if (!txnId || txnId.length > 128) {
+      res.status(400).json({ error: "Invalid transaction ID." });
+      return;
+    }
+
+    const [client] = await db
+      .select({ id: adminClients.id })
+      .from(adminClients)
+      .where(eq(adminClients.email, user.email.toLowerCase().trim()));
+    if (!client) {
+      res.status(404).json({ error: "Transaction not found." });
+      return;
+    }
+
+    const [cancelled] = await db
+      .update(adminServiceRequests)
+      .set({ status: "cancelled", updatedAt: new Date() })
+      .where(and(
+        eq(adminServiceRequests.clientId, client.id),
+        eq(adminServiceRequests.txnId, txnId),
+        eq(adminServiceRequests.status, "pending"),
+        inArray(adminServiceRequests.type, ["withdrawal", "send"]),
+      ))
+      .returning({ id: adminServiceRequests.id });
+
+    if (!cancelled) {
+      res.status(409).json({ error: "Transaction not found or no longer pending." });
+      return;
+    }
+
+    try {
+      await db.insert(adminActivityLog).values({
+        eventType: "service_request_cancelled",
+        clientId: client.id,
+        serviceRequestId: cancelled.id,
+        description: "Pending transaction cancelled by the account owner.",
+        metadata: { txnId },
+      });
+    } catch (auditError) {
+      logger.warn({ err: auditError, requestId: cancelled.id }, "Failed to record cancellation audit");
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "Failed to cancel pending transaction");
+    res.status(500).json({ error: "Failed to cancel transaction." });
   }
 });
 

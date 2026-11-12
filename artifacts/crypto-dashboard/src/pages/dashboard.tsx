@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { refreshUnsettledCount } from "@/hooks/use-unsettled-count";
 import { useLocation } from "wouter";
 import DashboardLayout from "@/components/dashboard-layout";
 import WalletModal from "@/components/wallet-modal";
@@ -24,6 +26,8 @@ type ModalType = "receive" | "deposit" | null;
 
 export default function Dashboard() {
   const [, navigate] = useLocation();
+  const { token } = useAuth();
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalType>(null);
   const [kycModal, setKycModal] = useState<{ open: boolean; reason?: string }>({ open: false });
   const { status: kycStatus } = useKyc();
@@ -72,10 +76,22 @@ export default function Dashboard() {
   })();
   const pendingCount = transactions.filter(t => t.statusType === "investigation" || t.statusType === "pending" || t.statusType === "processing").length;
 
-  function handleCancel(id: string, e: React.MouseEvent) {
+  async function handleCancel(id: string, e: React.MouseEvent) {
     e.stopPropagation();
-    cancelTransaction(id);
-    if (expandedTx === id) setExpandedTx(null);
+    setCancelError(null);
+    if (!token) {
+      setCancelError("Sign in to cancel this transaction.");
+      return;
+    }
+
+    try {
+      // Only remove the transaction and refresh warnings after server confirmation.
+      await cancelTransaction(id, token);
+      refreshUnsettledCount();
+      if (expandedTx === id) setExpandedTx(null);
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : "Could not cancel transaction.");
+    }
   }
 
   function handleVerify(tx: { id: string; asset: string; amount: string; usdAmount?: number }) {
@@ -250,6 +266,7 @@ export default function Dashboard() {
         {/* Transaction History */}
         <div className="bg-card border border-card-border rounded-2xl p-6">
           <h3 className="text-base font-semibold text-foreground mb-4">Transaction History</h3>
+          {cancelError && <p role="alert" className="mb-3 text-sm text-destructive">{cancelError}</p>}
           <div className="space-y-3">
             {transactions.length === 0 ? (
               <p className="text-center text-muted-foreground text-sm py-6">No transactions yet.</p>
