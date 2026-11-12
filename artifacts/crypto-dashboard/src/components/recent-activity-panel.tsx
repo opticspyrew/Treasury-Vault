@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { authApi, type AuthSessionRecord } from "@/lib/api";
+import { UNSETTLED_COUNT_REFRESH_EVENT } from "@/hooks/use-unsettled-count";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -135,6 +136,14 @@ export default function RecentActivityPanel() {
     return () => {
       signal.cancelled = true;
     };
+  }, [loadSessions]);
+
+  // Keep the pending-withdrawal warning in sync with server-confirmed
+  // cancellations (and future request submissions) without a page reload.
+  useEffect(() => {
+    const refresh = () => { void loadSessions(); };
+    window.addEventListener(UNSETTLED_COUNT_REFRESH_EVENT, refresh);
+    return () => window.removeEventListener(UNSETTLED_COUNT_REFRESH_EVENT, refresh);
   }, [loadSessions]);
 
   const handleRevokeAllOthers = useCallback(async () => {
